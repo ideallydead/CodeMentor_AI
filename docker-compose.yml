@@ -1,0 +1,73 @@
+version: '3.9'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: codementor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - codementor_net
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/codementor
+      - JWT_SECRET=changeme123
+      - LLM_PROVIDER=together
+      - LLM_MODEL=deepseek-coder
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '8000:8000'
+    volumes:
+      - ./backend:/app/backend
+    networks:
+      - codementor_net
+
+  sandbox:
+    build:
+      context: .
+      dockerfile: backend/sandbox/Dockerfile
+    environment:
+      - SANDBOX_TIMEOUT_SECONDS=10
+    network_mode: none
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - '4173:4173'
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./frontend/student-portal:/app/frontend/student-portal
+      - /app/frontend/student-portal/node_modules
+    networks:
+      - codementor_net
+
+networks:
+  codementor_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
