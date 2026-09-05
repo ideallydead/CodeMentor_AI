@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   postgres:
     image: postgres:15
@@ -25,8 +24,12 @@ services:
     environment:
       - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/codementor
       - JWT_SECRET=changeme123
-      - LLM_PROVIDER=together
-      - LLM_MODEL=deepseek-coder
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-coder}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,9 +53,9 @@ services:
           cpus: '0.5'
           memory: 256M
 
-  frontend:
+  student-portal:
     build:
-      context: ./frontend
+      context: ./frontend/student-portal
       dockerfile: Dockerfile
     ports:
       - '4173:4173'
@@ -60,8 +63,23 @@ services:
       backend:
         condition: service_started
     volumes:
-      - ./frontend/student-portal:/app/frontend/student-portal
-      - /app/frontend/student-portal/node_modules
+      - ./frontend/student-portal:/app
+      - /app/node_modules
+    networks:
+      - codementor_net
+
+  faculty-dashboard:
+    build:
+      context: ./frontend/faculty-dashboard
+      dockerfile: Dockerfile
+    ports:
+      - '4174:4174'
+    depends_on:
+      backend:
+        condition: service_started
+    volumes:
+      - ./frontend/faculty-dashboard:/app
+      - /app/node_modules
     networks:
       - codementor_net
 

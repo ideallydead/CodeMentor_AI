@@ -18,7 +18,7 @@ from typing import Optional, Dict, List, Any
 import logging
 
 from backend.core.schemas import ParsedSubmission, SandboxResults, AgentOutput, Diagnostic
-from backend.core.llm_client import LLMClient
+from backend.core.llm_client import LLMClient, get_agent_llm_client
 from backend.agents.schemas import (
     AssessmentReport,
     FailedTestCase,
@@ -311,10 +311,29 @@ Generate constructive feedback that:
                     "efficiency": efficiency_score
                 }
             })
-            return result.get("response", "No feedback generated.") if isinstance(result, dict) else str(result)
+            if isinstance(result, dict):
+                resp_text = result.get("response", "")
+                if not result.get("is_fallback") and resp_text and "Fallback response" not in resp_text:
+                    return resp_text
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")
-            return f"Assessment complete: correctness {correctness_score}%, standards {standards_score}%, efficiency {efficiency_score}%."
+
+        # Clean human-readable summary fallback when running offline or without LLM API key
+        if correctness_score >= 90:
+            return (
+                f"Assessment complete: Outstanding solution in {language}! Your code passed {passed_tests} of {total_tests} test cases "
+                f"with a high standards score of {standards_score}% and efficiency score of {efficiency_score}%."
+            )
+        elif correctness_score >= 60:
+            return (
+                f"Assessment complete: Good progress in {language}! Your submission passed {passed_tests} of {total_tests} test cases. "
+                f"Review the remaining failed edge cases and code standards to improve your score further."
+            )
+        else:
+            return (
+                f"Assessment complete: Your submission passed {passed_tests} of {total_tests} test cases ({correctness_score}% correctness). "
+                f"Focus on resolving compilation/runtime errors and logic boundaries to increase correctness."
+            )
 
 
 def assessment_agent(
@@ -333,6 +352,9 @@ def assessment_agent(
     Returns:
         AgentOutput: Wrapper around AssessmentReport for orchestrator integration
     """
+    if llm_client is None:
+        llm_client = get_agent_llm_client("assessment_agent")
+
     engine = AssessmentEngine()
     
     # Calculate deterministic scores
@@ -375,6 +397,18 @@ def assessment_agent(
         overall_recommendation=overall_recommendation
     )
     
+    # Extract all test execution results
+    all_test_results = [
+        {
+            "test_id": getattr(t, "test_id", f"tc_{idx}"),
+            "passed": getattr(t, "passed", False),
+            "actual_output": getattr(t, "actual_output", ""),
+            "execution_time_ms": getattr(t, "execution_time_ms", 0.0),
+            "error_message": getattr(t, "error_message", None)
+        }
+        for idx, t in enumerate(sandbox_results.test_results, start=1)
+    ] if sandbox_results and sandbox_results.test_results else []
+
     # Create report
     report = AssessmentReport(
         submission_id=parsed_submission.submission_id,
@@ -383,6 +417,7 @@ def assessment_agent(
         efficiency_score=efficiency_score,
         overall_recommendation=overall_recommendation,
         failed_tests=failed_tests,
+        all_test_results=all_test_results,
         flagged_issues=flagged_issues,
         justification_text=justification_text
     )

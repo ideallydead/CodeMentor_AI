@@ -19,7 +19,7 @@ from typing import Optional, Dict, List, Any
 import logging
 
 from backend.core.schemas import ParsedSubmission, AgentOutput, ComplexityMetrics
-from backend.core.llm_client import LLMClient
+from backend.core.llm_client import LLMClient, get_agent_llm_client
 from backend.agents.schemas import (
     AssessmentReport,
     FailedTestCase,
@@ -270,6 +270,9 @@ def mentor_agent(
     Returns:
         AgentOutput wrapping MentorReport details
     """
+    if llm_client is None:
+        llm_client = get_agent_llm_client("mentor_agent")
+
     engine = MentorEngine()
 
     if assessment_report:

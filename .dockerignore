@@ -1,0 +1,12 @@
+.git
+.vscode
+.pytest_cache
+*.zip
+*.pdf
+codementor.db
+__pycache__
+*.py[cod]
+*$py.class
+frontend/**/node_modules
+frontend/**/dist
+backend/**/__pycache__

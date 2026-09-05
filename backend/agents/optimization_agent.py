@@ -14,7 +14,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from backend.core.schemas import ParsedSubmission, AgentOutput
-from backend.core.llm_client import LLMClient
+from backend.core.llm_client import LLMClient, get_agent_llm_client
 from backend.agents.schemas import OptimizationFinding, OptimizationReport
 
 logger = logging.getLogger(__name__)
@@ -172,6 +172,9 @@ def optimization_agent(
     Returns:
         AgentOutput wrapping OptimizationReport
     """
+    if llm_client is None:
+        llm_client = get_agent_llm_client("optimization_agent")
+
     engine = OptimizationEngine()
     time_comp = engine.estimate_time_complexity(parsed_submission.source, parsed_submission.ast_summary)
     space_comp = engine.estimate_space_complexity(parsed_submission.source, parsed_submission.language)

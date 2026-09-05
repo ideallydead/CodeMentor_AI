@@ -64,3 +64,41 @@ class SubmissionStatusResponse(BaseModel):
 class ParseResponse(BaseModel):
     parsed_submission: ParsedSubmission
     diagnostics: List[Diagnostic] = []
+
+
+class FacultyOverrideRequest(BaseModel):
+    faculty_score: Optional[int] = None
+    final_grade: Optional[str] = None
+    faculty_notes: Optional[str] = None
+
+
+class MisconceptionItem(BaseModel):
+    misconception: str
+    affected_students_count: int
+    percentage_of_class: float
+
+
+class ConsolidatedSubmissionItem(BaseModel):
+    id: int
+    student_id: int
+    status: str
+    language: str
+    correctness_score: Optional[int] = None
+    overall_recommendation: str
+    integrity_risk: str
+    final_grade: Optional[str] = None
+    faculty_score: Optional[int] = None
+    faculty_notes: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class FacultyIntelligenceResponse(BaseModel):
+    assignment_id: int
+    title: str
+    language: str
+    total_submissions: int
+    class_averages: Dict[str, float]
+    grade_distribution: Dict[str, int]
+    top_misconceptions: List[MisconceptionItem]
+    consolidated_submissions: List[ConsolidatedSubmissionItem]
+

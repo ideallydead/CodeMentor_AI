@@ -11,7 +11,7 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from backend.core.schemas import ParsedSubmission, AgentOutput
-from backend.core.llm_client import LLMClient
+from backend.core.llm_client import LLMClient, get_agent_llm_client
 from backend.agents.schemas import SelectedVivaQuestion, VivaReport
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ def viva_question_agent(
     Returns:
         List of draft viva questions with 'prompt', 'expected_concepts', and 'sample_answer'
     """
-    client = llm_client or LLMClient()
+    client = llm_client or get_agent_llm_client("viva_agent")
     system_prompt = (
         "You are a computer science professor creating oral viva examination questions for a programming assignment. "
         "Generate 3 to 5 conceptual viva questions as a JSON array of objects with keys: 'prompt', 'expected_concepts', and 'sample_answer'."
@@ -45,8 +45,14 @@ def viva_question_agent(
     try:
         if hasattr(client, "generate"):
             llm_res = client.generate(prompt=user_prompt, system_prompt=system_prompt, json_mode=True)
-            if isinstance(llm_res, dict) and not llm_res.get('is_fallback') and 'parsed' in llm_res and isinstance(llm_res['parsed'], list):
-                return llm_res['parsed']
+            if isinstance(llm_res, dict) and 'parsed' in llm_res and llm_res['parsed']:
+                parsed = llm_res['parsed']
+                if isinstance(parsed, list) and len(parsed) > 0:
+                    return parsed
+                elif isinstance(parsed, dict):
+                    for k in ['viva_questions', 'questions', 'items', 'bank']:
+                        if k in parsed and isinstance(parsed[k], list) and len(parsed[k]) > 0:
+                            return parsed[k]
     except Exception as exc:
         logger.error(f"LLM draft viva bank generation failed: {exc}")
 

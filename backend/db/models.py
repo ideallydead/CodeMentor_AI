@@ -68,6 +68,9 @@ class Submission(Base):
     source_code = Column(Text)
     language = Column(String(50), nullable=False)
     status = Column(String(50), default='pending')
+    final_grade = Column(String(50), nullable=True)
+    faculty_score = Column(Integer, nullable=True)
+    faculty_notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 

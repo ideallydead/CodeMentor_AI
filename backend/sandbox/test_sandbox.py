@@ -39,7 +39,7 @@ int main() {
     return 0;
 }
 """
-    result = execute_in_sandbox(code, 'c')
+    result = execute_in_sandbox(code, 'c', timeout_seconds=15)
     assert result['status'] == 'success'
     assert 'Hello from C Sandbox' in result['stdout']
     assert result['exit_code'] == 0

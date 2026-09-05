@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 from backend.core.schemas import ParsedSubmission, AgentOutput
 from backend.core.ast_normalizer import normalize_ast
+from backend.core.llm_client import LLMClient, get_agent_llm_client
 from backend.agents.schemas import IntegrityReport, IntegrityMatchDetails, RefactoringPattern
 
 
@@ -48,12 +49,14 @@ def _detect_refactoring(target_norm: Dict[str, Any], hist_norm: Dict[str, Any], 
 
 def integrity_agent(
     parsed_submission: ParsedSubmission,
-    historical_submissions: Optional[List[Dict[str, Any]]] = None
+    historical_submissions: Optional[List[Dict[str, Any]]] = None,
+    llm_client: Optional[LLMClient] = None
 ) -> AgentOutput:
     """
     Academic Integrity Agent: Performs AST-level structural similarity comparison,
     refactoring detection, and generates an explainable integrity report.
     """
+    client = llm_client or get_agent_llm_client("integrity_agent")
     target_norm = normalize_ast(parsed_submission.source, parsed_submission.language)
     target_kgrams = set(target_norm['k_grams'])
     

@@ -50,6 +50,7 @@ class AssessmentReport(BaseModel):
     
     # Evidence and details
     failed_tests: List[FailedTestCase] = Field(default_factory=list, description="List of test cases that failed")
+    all_test_results: List[dict] = Field(default_factory=list, description="All test execution results from sandbox")
     flagged_issues: List[FlaggedIssue] = Field(default_factory=list, description="Code issues found")
     
     # Narrative explanation

@@ -43,7 +43,24 @@ public class Calculator {
     assert result.ast_summary.function_count == 1
     assert result.complexity.cyclomatic_complexity is not None
     assert result.complexity.cyclomatic_complexity >= 2
+    assert result.complexity.halstead_volume is not None
     assert result.complexity.rank in ['A', 'B', 'C', 'D', 'F']
+    assert len(result.diagnostics) == 0
+
+
+def test_java_adapter_snippet_fallback():
+    code = """
+public int multiply(int x, int y) {
+    for (int i = 0; i < y; i++) {
+        x += i;
+    }
+    return x;
+}
+"""
+    result = java_adapter.parse_source(code)
+    assert result.language == 'java'
+    assert result.ast_summary.function_count == 1
+    assert result.complexity.cyclomatic_complexity >= 2
     assert len(result.diagnostics) == 0
 
 
@@ -71,7 +88,25 @@ int main() {
     assert result.ast_summary.function_count == 1
     assert result.complexity.cyclomatic_complexity is not None
     assert result.complexity.cyclomatic_complexity >= 2
+    assert result.complexity.halstead_volume is not None
     assert len(result.diagnostics) == 0
+
+
+def test_c_adapter_static_warnings():
+    code = """
+#include <stdio.h>
+#include <stdlib.h>
+
+int main() {
+    int *ptr = (int*) malloc(100 * sizeof(int));
+    gets(ptr); // Unsafe gets call
+    return 0;
+}
+"""
+    result = c_adapter.parse_source(code)
+    assert len(result.static_findings) >= 1
+    codes = [f.code for f in result.static_findings]
+    assert any('memory-leak' in c or 'unsafe' in c for c in codes)
 
 
 def test_c_adapter_syntax_error():

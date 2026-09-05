@@ -71,7 +71,12 @@ function App() {
   const [facLoading, setFacLoading] = useState(false)
   const [currentQuestion, setCurrentQuestion] = useState(null)
   const [analytics, setAnalytics] = useState(null)
+  const [facultyIntelligence, setFacultyIntelligence] = useState(null)
   const [facMsg, setFacMsg] = useState(null)
+  const [overrideSubId, setOverrideSubId] = useState(null)
+  const [overrideScore, setOverrideScore] = useState('90')
+  const [overrideGrade, setOverrideGrade] = useState('excellent')
+  const [overrideNotes, setOverrideNotes] = useState('Verified understanding in viva examination.')
 
   const handleRoleTabChange = (role) => {
     setUserRole(role)
@@ -96,11 +101,45 @@ function App() {
     }
   }
 
+  const fetchIntelligence = async (qId) => {
+    try {
+      const res = await fetch(`${API_BASE}/questions/${qId}/intelligence`)
+      if (res.ok) {
+        const data = await res.json()
+        setFacultyIntelligence(data)
+      }
+    } catch (e) {
+      console.error('Failed to fetch intelligence', e)
+    }
+  }
+
+  const handleOverrideSubmit = async (subId) => {
+    try {
+      const res = await fetch(`${API_BASE}/submissions/${subId}/override`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          faculty_score: parseInt(overrideScore, 10) || null,
+          final_grade: overrideGrade,
+          faculty_notes: overrideNotes
+        })
+      })
+      if (res.ok) {
+        setFacMsg('✅ Grade override saved successfully!')
+        setOverrideSubId(null)
+        if (currentQuestion) fetchIntelligence(currentQuestion.id)
+      }
+    } catch (e) {
+      console.error('Failed to save override', e)
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchAnalytics()
+      if (assignmentId) fetchIntelligence(parseInt(assignmentId, 10))
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, assignmentId])
 
   const handleLoginSubmit = (e) => {
     e.preventDefault()
@@ -227,11 +266,13 @@ function App() {
   const mentorOutput = getAgentOutput('mentor_agent')
   const optOutput = getAgentOutput('optimization_agent')
   const vivaOutput = getAgentOutput('viva_agent')
+  const integrityOutput = getAgentOutput('integrity_agent')
 
   const assessmentDetails = assessmentOutput?.details || {}
   const mentorDetails = mentorOutput?.details || {}
   const optDetails = optOutput?.details || {}
   const vivaDetails = vivaOutput?.details || {}
+  const integrityDetails = integrityOutput?.details || {}
 
   if (!isAuthenticated) {
     return (
@@ -317,7 +358,7 @@ function App() {
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       <header className="glass-card" style={{ padding: '16px 28px', marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 700 }}>
@@ -335,13 +376,6 @@ function App() {
               {currentUser?.role?.toUpperCase()}
             </span>
           </div>
-
-          <button
-            className="btn-outline"
-            onClick={() => setUserRole(userRole === 'faculty' ? 'student' : 'faculty')}
-          >
-            Switch to {userRole === 'faculty' ? 'Student Portal 🎓' : 'Faculty Module 🏫'}
-          </button>
 
           <button className="btn-outline" onClick={handleLogout} style={{ color: 'var(--accent-rose)', borderColor: 'rgba(244, 63, 94, 0.3)' }}>
             🔒 Logout
@@ -483,6 +517,185 @@ function App() {
               )}
             </section>
           </div>
+
+          {/* ========================================================================= */}
+          {/* SECTION 3: FACULTY INTELLIGENCE & CLASS MISCONCEPTION ANALYTICS          */}
+          {/* ========================================================================= */}
+          <section className="glass-card" style={{ padding: 24, marginTop: 28 }}>
+            <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16 }}>
+              📊 3. Class-Wide Misconception Analytics & Consolidated Submissions
+            </h2>
+
+            {facultyIntelligence ? (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
+                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Class Avg Correctness</span>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: 4 }}>
+                      {facultyIntelligence.class_averages?.correctness || 0}%
+                    </div>
+                  </div>
+                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Class Avg Quality</span>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)', marginTop: 4 }}>
+                      {facultyIntelligence.class_averages?.standards || 0}%
+                    </div>
+                  </div>
+                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Submissions</span>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-purple)', marginTop: 4 }}>
+                      {facultyIntelligence.total_submissions}
+                    </div>
+                  </div>
+                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Top Grade Band</span>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f59e0b', marginTop: 4 }}>
+                      {Object.keys(facultyIntelligence.grade_distribution || {}).reduce((a, b) => (facultyIntelligence.grade_distribution[a] > facultyIntelligence.grade_distribution[b] ? a : b), 'good').toUpperCase()}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
+                  <div style={{ background: '#090d16', padding: 18, borderRadius: 12, border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-rose)', marginBottom: 12 }}>
+                      ⚠️ Top Class Misconceptions & Error Clusters
+                    </h3>
+                    {facultyIntelligence.top_misconceptions && facultyIntelligence.top_misconceptions.length > 0 ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {facultyIntelligence.top_misconceptions.map((item, idx) => (
+                          <div key={idx} style={{ background: 'rgba(244, 63, 94, 0.08)', padding: 12, borderRadius: 8, border: '1px solid rgba(244, 63, 94, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{item.misconception}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Affected: {item.affected_students_count} student(s)</div>
+                            </div>
+                            <span className="tag tag-rose" style={{ fontSize: '0.8rem' }}>{item.percentage_of_class}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No common misconceptions flagged yet.</p>
+                    )}
+                  </div>
+
+                  <div style={{ background: '#090d16', padding: 18, borderRadius: 12, border: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-blue)', marginBottom: 12 }}>
+                      📈 Performance Distribution
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {Object.entries(facultyIntelligence.grade_distribution || {}).map(([band, count], idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span style={{ width: 130, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{band.toUpperCase()}</span>
+                          <div style={{ flex: 1, background: '#1e293b', height: 12, borderRadius: 6, overflow: 'hidden' }}>
+                            <div style={{ width: `${(count / Math.max(1, facultyIntelligence.total_submissions)) * 100}%`, height: '100%', background: band === 'excellent' ? 'var(--accent-emerald)' : band === 'good' ? 'var(--accent-blue)' : band === 'fair' ? '#f59e0b' : 'var(--accent-rose)' }} />
+                          </div>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 12 }}>
+                  📋 Consolidated Submissions & Grade Override Table
+                </h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#090d16', borderBottom: '1px solid var(--border-color)' }}>
+                        <th style={{ padding: '10px 12px' }}>Sub ID</th>
+                        <th style={{ padding: '10px 12px' }}>Student</th>
+                        <th style={{ padding: '10px 12px' }}>Correctness</th>
+                        <th style={{ padding: '10px 12px' }}>Integrity Risk</th>
+                        <th style={{ padding: '10px 12px' }}>AI Grade Rec</th>
+                        <th style={{ padding: '10px 12px' }}>Final Grade</th>
+                        <th style={{ padding: '10px 12px' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {facultyIntelligence.consolidated_submissions?.map((s) => (
+                        <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                          <td style={{ padding: '10px 12px' }}>#{s.id}</td>
+                          <td style={{ padding: '10px 12px' }}>Student #{s.student_id}</td>
+                          <td style={{ padding: '10px 12px' }}>{s.correctness_score !== null ? `${s.correctness_score}%` : 'N/A'}</td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span className={`tag ${s.integrity_risk === 'high' ? 'tag-rose' : s.integrity_risk === 'moderate' ? 'tag-amber' : 'tag-emerald'}`}>
+                              {s.integrity_risk.toUpperCase()}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <span className="tag tag-blue">{s.overall_recommendation.toUpperCase()}</span>
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            {s.final_grade ? (
+                              <span className="tag tag-emerald">✅ {s.final_grade.toUpperCase()} ({s.faculty_score ?? ''})</span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>Pending Override</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <button
+                              className="btn-outline"
+                              style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                              onClick={() => setOverrideSubId(s.id)}
+                            >
+                              ✏️ Override Grade
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {overrideSubId && (
+                  <div style={{ marginTop: 20, background: '#090d16', padding: 20, borderRadius: 12, border: '1px solid var(--accent-purple)' }}>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--accent-purple)', marginBottom: 12 }}>
+                      ✏️ Instructor Override for Submission #{overrideSubId}
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 12, marginBottom: 12 }}>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Override Score (0-100)</label>
+                        <input
+                          type="number"
+                          value={overrideScore}
+                          onChange={(e) => setOverrideScore(e.target.value)}
+                          style={{ background: '#1e293b', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 10px', width: '100%' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Final Grade Band</label>
+                        <select
+                          value={overrideGrade}
+                          onChange={(e) => setOverrideGrade(e.target.value)}
+                          style={{ background: '#1e293b', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 10px', width: '100%' }}
+                        >
+                          <option value="excellent">Excellent</option>
+                          <option value="good">Good</option>
+                          <option value="fair">Fair</option>
+                          <option value="needs_improvement">Needs Improvement</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Instructor Feedback / Override Notes</label>
+                        <input
+                          type="text"
+                          value={overrideNotes}
+                          onChange={(e) => setOverrideNotes(e.target.value)}
+                          style={{ background: '#1e293b', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 10px', width: '100%' }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                      <button className="btn-outline" style={{ fontSize: '0.8rem' }} onClick={() => setOverrideSubId(null)}>Cancel</button>
+                      <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleOverrideSubmit(overrideSubId)}>Save Grade Override ✅</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Select or create an assignment to view class misconception analytics and student override options.</p>
+            )}
+          </section>
         </div>
       )}
 
