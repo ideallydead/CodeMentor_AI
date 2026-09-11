@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 PROVIDER_CONFIGS = {
     "groq": {
         "base_url": "https://api.groq.com/openai/v1",
-        "default_model": "llama-3.3-70b-versatile",
+        "default_model": "qwen/qwen3.8-27b",
         "env_key": "GROQ_API_KEY"
     },
     "together": {
@@ -35,9 +35,10 @@ PROVIDER_CONFIGS = {
 
 MODEL_ALIASES = {
     "groq": {
-        "deepseek-coder": "llama-3.3-70b-versatile",
-        "qwen2.5-coder": "llama-3.3-70b-versatile",
-        "code-llama": "llama-3.3-70b-versatile"
+        "deepseek-coder": "qwen/qwen3.8-27b",
+        "qwen2.5-coder": "qwen/qwen3.8-27b",
+        "code-llama": "qwen/qwen3.8-27b",
+        "llama-3.3-70b-versatile": "qwen/qwen3.8-27b"
     },
     "together": {
         "deepseek-coder": "deepseek-ai/DeepSeek-Coder-V2-Instruct",

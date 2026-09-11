@@ -404,7 +404,10 @@ def assessment_agent(
             "passed": getattr(t, "passed", False),
             "actual_output": getattr(t, "actual_output", ""),
             "execution_time_ms": getattr(t, "execution_time_ms", 0.0),
-            "error_message": getattr(t, "error_message", None)
+            "error_message": getattr(t, "error_message", None),
+            "input_data": getattr(t, "input_data", None),
+            "expected_output": getattr(t, "expected_output", None),
+            "failure_reason": getattr(t, "failure_reason", None)
         }
         for idx, t in enumerate(sandbox_results.test_results, start=1)
     ] if sandbox_results and sandbox_results.test_results else []

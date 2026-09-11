@@ -47,6 +47,9 @@ class SandboxTestResult(BaseModel):
     actual_output: str
     execution_time_ms: float
     error_message: Optional[str] = None
+    input_data: Optional[str] = None
+    expected_output: Optional[str] = None
+    failure_reason: Optional[str] = None
 
 
 class SandboxResults(BaseModel):

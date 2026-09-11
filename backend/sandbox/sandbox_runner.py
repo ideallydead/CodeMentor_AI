@@ -73,6 +73,7 @@ def _run_student():
     fn = funcs[-1]
     if _raw_in:
         try:
+            # 1. Check if named kwargs assignment e.g. 'nums = [2, 7], target = 9'
             if '=' in _raw_in:
                 matches = re.findall(r'([A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*(.*?)(?:,\\s*(?=[A-Za-z_][A-Za-z0-9_]*\\s*=)|$)', _raw_in)
                 if matches:
@@ -80,10 +81,63 @@ def _run_student():
                     res = fn(**kwargs)
                     print(json.dumps(res) if isinstance(res, (list, dict, tuple)) else res)
                     return
-            val = ast.literal_eval(_raw_in)
-            res = fn(val) if not isinstance(val, tuple) else fn(*val)
-            print(json.dumps(res) if isinstance(res, (list, dict, tuple)) else res)
-            return
+            
+            # 2. Try ast literal eval for pure python literals e.g. '[1, 2, 3]'
+            try:
+                val = ast.literal_eval(_raw_in)
+                res = fn(val) if not isinstance(val, tuple) else fn(*val)
+                print(json.dumps(res) if isinstance(res, (list, dict, tuple)) else res)
+                return
+            except Exception:
+                pass
+
+            # 3. HackerRank line-by-line stdin format (e.g. line 1: '1 2 3 4 5', line 2: '3')
+            lines = [l.strip() for l in _raw_in.splitlines() if l.strip()]
+            if lines:
+                args = []
+                for line in lines:
+                    tokens = line.split()
+                    if len(tokens) > 1:
+                        parsed_row = []
+                        for tok in tokens:
+                            try:
+                                parsed_row.append(int(tok))
+                            except ValueError:
+                                try:
+                                    parsed_row.append(float(tok))
+                                except ValueError:
+                                    parsed_row.append(tok)
+                        args.append(parsed_row)
+                    elif len(tokens) == 1:
+                        tok = tokens[0]
+                        try:
+                            args.append(int(tok))
+                        except ValueError:
+                            try:
+                                args.append(float(tok))
+                            except ValueError:
+                                try:
+                                    args.append(ast.literal_eval(tok))
+                                except Exception:
+                                    args.append(tok)
+                if args:
+                    import inspect
+                    call_args = args
+                    try:
+                        sig = inspect.signature(fn)
+                        num_params = len(sig.parameters)
+                        if len(args) > num_params and len(args) >= 2 and isinstance(args[0], int) and isinstance(args[1], list) and len(args[1]) == args[0]:
+                            call_args = args[1:]
+                    except Exception:
+                        pass
+                    try:
+                        res = fn(*call_args)
+                        print(json.dumps(res) if isinstance(res, (list, dict, tuple)) else res)
+                        return
+                    except TypeError:
+                        res = fn(*args)
+                        print(json.dumps(res) if isinstance(res, (list, dict, tuple)) else res)
+                        return
         except Exception:
             pass
     try:

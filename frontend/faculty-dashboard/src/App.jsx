@@ -1,161 +1,350 @@
 import React, { useState, useEffect } from 'react'
+import api from './services/api'
+import Navbar from './components/Navbar'
+import WorkspaceTabs from './components/WorkspaceTabs'
+import AssignmentsView from './components/AssignmentsView'
+import AnalyticsCards from './components/AnalyticsCards'
+import DraftAssignmentForm from './components/DraftAssignmentForm'
+import DraftReviewer from './components/DraftReviewer'
+import MisconceptionAnalytics from './components/MisconceptionAnalytics'
+import SubmissionsTable from './components/SubmissionsTable'
+import SubmissionInspectorModal from './components/SubmissionInspectorModal'
+import ConfirmModal from './components/ConfirmModal'
+import Toast from './components/Toast'
+import { School, User, Lock, Trash2, Code2, ArrowRight } from 'lucide-react'
 import './index.css'
 
-const hostname = typeof window !== 'undefined' && window.location.hostname ? window.location.hostname : 'localhost'
-const API_BASE = `http://${hostname}:8000/api`
-
-const SAMPLE_CODE = {
-  python: `def two_sum(nums, target):
-    # Hash map strategy for O(n) runtime
-    seen = {}
-    for i, num in enumerate(nums):
-        diff = target - num
-        if diff in seen:
-            return [seen[diff], i]
-        seen[num] = i
-    return []
-`,
-  java: `public class Solution {
-    public int[] twoSum(int[] nums, int target) {
-        java.util.Map<Integer, Integer> map = new java.util.HashMap<>();
-        for (int i = 0; i < nums.length; i++) {
-            int complement = target - nums[i];
-            if (map.containsKey(complement)) {
-                return new int[] { map.get(complement), i };
-            }
-            map.put(nums[i], i);
-        }
-        return new int[0];
-    }
-}
-`,
-  c: `#include <stdio.h>
-
-int main() {
-    int arr[] = {2, 7, 11, 15};
-    int target = 9;
-    int n = 4;
-    for (int i = 0; i < n; i++) {
-        for (int j = i + 1; j < n; j++) {
-            if (arr[i] + arr[j] == target) {
-                printf("Indices: %d, %d\\n", i, j);
-                return 0;
-            }
-        }
-    }
-    return 0;
-}
-`
-}
-
 function App() {
+  // Navigation & Workspace State
+  const [activeView, setActiveView] = useState('assignments') // 'assignments', 'submissions', 'insights'
+
+  // Theme State
+  const [theme, setTheme] = useState(() => localStorage.getItem('codementor_theme') || 'dark')
+
+  // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [userRole, setUserRole] = useState('faculty')
   const [username, setUsername] = useState('faculty@codementor.edu')
   const [password, setPassword] = useState('faculty123')
   const [loginError, setLoginError] = useState(null)
   const [currentUser, setCurrentUser] = useState(null)
 
-  const [language, setLanguage] = useState('python')
-  const [assignmentId, setAssignmentId] = useState('1')
-  const [studentId, setStudentId] = useState('101')
-  const [sourceCode, setSourceCode] = useState(SAMPLE_CODE.python)
-  const [submitting, setSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState('mentor')
-  const [reportData, setReportData] = useState(null)
-  const [errorMsg, setErrorMsg] = useState(null)
-
+  // Assignment Authoring State
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [facLanguage, setFacLanguage] = useState('python')
   const [facLoading, setFacLoading] = useState(false)
   const [currentQuestion, setCurrentQuestion] = useState(null)
+  const [questionsList, setQuestionsList] = useState([])
+  const [assignmentId, setAssignmentId] = useState('')
+
+  // Intelligence & Analytics State
   const [analytics, setAnalytics] = useState(null)
   const [facultyIntelligence, setFacultyIntelligence] = useState(null)
-  const [facMsg, setFacMsg] = useState(null)
-  const [overrideSubId, setOverrideSubId] = useState(null)
-  const [overrideScore, setOverrideScore] = useState('90')
-  const [overrideGrade, setOverrideGrade] = useState('excellent')
-  const [overrideNotes, setOverrideNotes] = useState('Verified understanding in viva examination.')
 
-  const handleRoleTabChange = (role) => {
-    setUserRole(role)
-    if (role === 'faculty') {
-      setUsername('faculty@codementor.edu')
-      setPassword('faculty123')
-    } else {
-      setUsername('student101@codementor.edu')
-      setPassword('student123')
-    }
+  // Modals & Notifications
+  const [inspectSubmission, setInspectSubmission] = useState(null)
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false })
+  const [toasts, setToasts] = useState([])
+
+  const addToast = (message, type = 'info') => {
+    const id = Date.now() + Math.random()
+    setToasts(prev => [...prev, { id, message, type }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, 4000)
   }
 
+  const dismissToast = (id) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }
+
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    localStorage.setItem('codementor_theme', next)
+  }
+
+  // Fetch Analytics & Questions
   const fetchAnalytics = async () => {
     try {
-      const res = await fetch(`${API_BASE}/analytics`)
-      if (res.ok) {
-        const data = await res.json()
-        setAnalytics(data)
-      }
+      const data = await api.getAnalytics()
+      setAnalytics(data)
     } catch (e) {
       console.error('Failed to fetch analytics', e)
     }
   }
 
+  const fetchQuestions = async () => {
+    try {
+      const data = await api.getQuestions()
+      setQuestionsList(data)
+      if (data.length > 0) {
+        const currentId = assignmentId || String(data[0].id)
+        const matched = data.find(q => String(q.id) === currentId) || data[0]
+        setAssignmentId(String(matched.id))
+        setCurrentQuestion(matched)
+        fetchIntelligence(matched.id)
+      }
+    } catch (e) {
+      console.error('Failed to fetch questions', e)
+    }
+  }
+
   const fetchIntelligence = async (qId) => {
     try {
-      const res = await fetch(`${API_BASE}/questions/${qId}/intelligence`)
-      if (res.ok) {
-        const data = await res.json()
-        setFacultyIntelligence(data)
-      }
+      const data = await api.getFacultyIntelligence(qId)
+      setFacultyIntelligence(data)
     } catch (e) {
       console.error('Failed to fetch intelligence', e)
     }
   }
 
-  const handleOverrideSubmit = async (subId) => {
+  const handleSelectAssignment = (qId) => {
+    setAssignmentId(String(qId))
+    const found = questionsList.find(q => String(q.id) === String(qId))
+    if (found) {
+      setCurrentQuestion(found)
+    }
+    fetchIntelligence(parseInt(qId, 10))
+  }
+
+  // Dynamic Real-time Sync & Auto-Refresh
+  useEffect(() => {
+    let channel = null
     try {
-      const res = await fetch(`${API_BASE}/submissions/${subId}/override`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          faculty_score: parseInt(overrideScore, 10) || null,
-          final_grade: overrideGrade,
-          faculty_notes: overrideNotes
-        })
-      })
-      if (res.ok) {
-        setFacMsg('✅ Grade override saved successfully!')
-        setOverrideSubId(null)
-        if (currentQuestion) fetchIntelligence(currentQuestion.id)
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        channel = new BroadcastChannel('codementor_sync')
+        channel.onmessage = (event) => {
+          const { type, assignmentId: evtAssignmentId } = event.data || {}
+          if (type === 'SUBMISSION_CREATED' || type === 'ASSIGNMENT_UPDATED' || type === 'DATA_RESET' || type === 'OVERRIDE_SAVED') {
+            fetchAnalytics()
+            if (assignmentId) {
+              fetchIntelligence(parseInt(assignmentId, 10))
+            } else if (evtAssignmentId) {
+              fetchIntelligence(parseInt(evtAssignmentId, 10))
+            }
+          }
+        }
       }
     } catch (e) {
-      console.error('Failed to save override', e)
+      console.warn('BroadcastChannel error', e)
     }
-  }
+
+    return () => {
+      if (channel) channel.close()
+    }
+  }, [assignmentId])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const refreshData = () => {
+      fetchAnalytics()
+      if (assignmentId) {
+        fetchIntelligence(parseInt(assignmentId, 10))
+      }
+    }
+
+    // Auto-poll interval (4 seconds for real-time analytics updates)
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      refreshData()
+    }, 4000)
+
+    const handleFocus = () => {
+      refreshData()
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [isAuthenticated, assignmentId])
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchAnalytics()
-      if (assignmentId) fetchIntelligence(parseInt(assignmentId, 10))
+      fetchQuestions()
     }
-  }, [isAuthenticated, assignmentId])
+  }, [isAuthenticated])
 
+  // Create Assignment Flow
+  const handleCreateQuestion = async (e) => {
+    e.preventDefault()
+    setFacLoading(true)
+    try {
+      const data = await api.createQuestion({ title, description, language: facLanguage })
+      setCurrentQuestion(data)
+      setAssignmentId(String(data.id))
+      setTitle('')
+      setDescription('')
+      addToast('✨ Draft Assignment & AI Test/Viva Bank Created!', 'success')
+      await fetchQuestions()
+      await fetchAnalytics()
+      fetchIntelligence(data.id)
+    } catch (err) {
+      addToast(`Error: ${err.message}`, 'error')
+    } finally {
+      setFacLoading(false)
+    }
+  }
+
+  // Update Draft Test Cases
+  const handleUpdateDraftTests = async (updatedTests) => {
+    if (!currentQuestion) return
+    setFacLoading(true)
+    try {
+      const updated = await api.updateQuestion(currentQuestion.id, { draft_tests: updatedTests })
+      setCurrentQuestion(updated)
+      addToast('✅ Draft test cases updated successfully.', 'success')
+      await fetchQuestions()
+    } catch (err) {
+      addToast(`Update failed: ${err.message}`, 'error')
+    } finally {
+      setFacLoading(false)
+    }
+  }
+
+  // Approve Assignment Flow
+  const handleApprove = async () => {
+    if (!currentQuestion) return
+    setFacLoading(true)
+    try {
+      const updated = await api.approveQuestion(currentQuestion.id)
+      setCurrentQuestion(updated)
+      addToast('✅ Assignment Approved! Students can now submit solutions.', 'success')
+      await fetchQuestions()
+      await fetchAnalytics()
+    } catch (err) {
+      addToast(`Approval failed: ${err.message}`, 'error')
+    } finally {
+      setFacLoading(false)
+    }
+  }
+
+  // Delete Assignment Flow with Glassmorphic Confirmation Modal
+  const handleDeleteQuestion = (qId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete Assignment #${qId}?`,
+      message: `Are you sure you want to permanently delete assignment #${qId} and all associated student submissions, evaluation reports, and test cases? This action cannot be undone.`,
+      confirmText: 'Delete Assignment',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false })
+        setFacLoading(true)
+        try {
+          await api.deleteQuestion(qId)
+          addToast(`🗑️ Assignment #${qId} deleted successfully.`, 'info')
+          const remaining = questionsList.filter(q => q.id !== qId)
+          setQuestionsList(remaining)
+          if (remaining.length > 0) {
+            setAssignmentId(String(remaining[0].id))
+            setCurrentQuestion(remaining[0])
+            fetchIntelligence(remaining[0].id)
+          } else {
+            setAssignmentId('')
+            setCurrentQuestion(null)
+            setFacultyIntelligence(null)
+          }
+          await fetchAnalytics()
+        } catch (err) {
+          addToast(`Delete failed: ${err.message}`, 'error')
+        } finally {
+          setFacLoading(false)
+        }
+      }
+    })
+  }
+
+  // Delete Submission Flow
+  const handleDeleteSubmission = (subId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: `Delete Submission #${subId}?`,
+      message: `Delete student submission #${subId} and its associated multi-agent evaluation report?`,
+      confirmText: 'Delete Submission',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false })
+        setFacLoading(true)
+        try {
+          await api.deleteSubmission(subId)
+          addToast(`🗑️ Submission #${subId} deleted successfully.`, 'info')
+          if (assignmentId) fetchIntelligence(parseInt(assignmentId, 10))
+          await fetchAnalytics()
+        } catch (err) {
+          addToast(`Delete failed: ${err.message}`, 'error')
+        } finally {
+          setFacLoading(false)
+        }
+      }
+    })
+  }
+
+  // Reset All Data Flow
+  const handleResetAllData = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reset ALL System Data?',
+      message: '⚠️ Are you sure you want to wipe ALL assignments, student submissions, test cases, and evaluation reports across the entire platform? This action cannot be undone.',
+      confirmText: 'Reset Everything',
+      isDanger: true,
+      onConfirm: async () => {
+        setConfirmModal({ isOpen: false })
+        setFacLoading(true)
+        try {
+          await api.resetAllData()
+          addToast('🧹 All data permanently wiped and reset to initial clean state!', 'success')
+          setCurrentQuestion(null)
+          setFacultyIntelligence(null)
+          setQuestionsList([])
+          setAssignmentId('')
+          setAnalytics({
+            assignments_total: 0,
+            approved_assignments: 0,
+            submissions_total: 0,
+            pending_submissions: 0
+          })
+          await fetchAnalytics()
+          await fetchQuestions()
+        } catch (err) {
+          addToast(`Reset failed: ${err.message}`, 'error')
+        } finally {
+          setFacLoading(false)
+        }
+      }
+    })
+  }
+
+  // Save Grade Override
+  const handleSaveOverride = async (subId, payload) => {
+    try {
+      await api.overrideSubmission(subId, payload)
+      addToast('✅ Grade override and feedback saved successfully!', 'success')
+      setInspectSubmission(null)
+      if (assignmentId) fetchIntelligence(parseInt(assignmentId, 10))
+    } catch (err) {
+      addToast(`Failed to save override: ${err.message}`, 'error')
+    }
+  }
+
+  // Authentication Flow
   const handleLoginSubmit = (e) => {
     e.preventDefault()
     setLoginError(null)
 
     if (!username || !password) {
-      setLoginError('Please enter username and password')
+      setLoginError('Please enter faculty credentials')
       return
     }
 
-    const nameDisplay = userRole === 'faculty' ? 'Prof. Alan Turing' : 'Vijil (Student #101)'
     setCurrentUser({
-      username: username,
-      name: nameDisplay,
-      role: userRole,
-      id: userRole === 'student' ? studentId : 'FAC_001'
+      username,
+      name: 'Prof. Alan Turing',
+      role: 'faculty',
+      id: 'FAC_001'
     })
     setIsAuthenticated(true)
   }
@@ -163,156 +352,46 @@ function App() {
   const handleLogout = () => {
     setIsAuthenticated(false)
     setCurrentUser(null)
-    setReportData(null)
-    setErrorMsg(null)
   }
 
-  const handleLanguageChange = (lang) => {
-    setLanguage(lang)
-    setSourceCode(SAMPLE_CODE[lang] || '')
-  }
-
-  const handleStudentSubmit = async () => {
-    setSubmitting(true)
-    setErrorMsg(null)
-    setReportData(null)
-    try {
-      const res = await fetch(`${API_BASE}/submissions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assignment_id: parseInt(assignmentId, 10),
-          student_id: parseInt(studentId, 10),
-          source_code: sourceCode,
-          language: language
-        })
-      })
-
-      if (!res.ok) {
-        const errJson = await res.json()
-        throw new Error(errJson.detail || `Server returned error status ${res.status}`)
-      }
-
-      const submission = await res.json()
-      const subId = submission.id
-
-      const statusRes = await fetch(`${API_BASE}/submissions/${subId}/status`)
-      if (!statusRes.ok) {
-        throw new Error('Failed to fetch assessment status')
-      }
-      const statusJson = await statusRes.json()
-      
-      setReportData(statusJson.details || {})
-    } catch (err) {
-      if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
-        setErrorMsg(`Unable to connect to API server at ${API_BASE}. Please verify backend server is running on port 8000.`)
-      } else {
-        setErrorMsg(err.message)
-      }
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleCreateQuestion = async (e) => {
-    e.preventDefault()
-    if (!title) return
-    setFacLoading(true)
-    setFacMsg(null)
-    try {
-      const res = await fetch(`${API_BASE}/questions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, description, language: facLanguage })
-      })
-      if (!res.ok) throw new Error('Failed to create question')
-      const data = await res.json()
-      setCurrentQuestion(data)
-      setAssignmentId(String(data.id))
-      setFacMsg('✨ Draft Assignment & AI Test/Viva Bank Created!')
-      fetchAnalytics()
-    } catch (err) {
-      setFacMsg(`❌ Error: ${err.message}`)
-    } finally {
-      setFacLoading(false)
-    }
-  }
-
-  const handleApprove = async () => {
-    if (!currentQuestion) return
-    setFacLoading(true)
-    try {
-      const res = await fetch(`${API_BASE}/questions/${currentQuestion.id}/approve`, {
-        method: 'POST'
-      })
-      if (!res.ok) throw new Error('Approval failed')
-      const updated = await res.json()
-      setCurrentQuestion(updated)
-      setFacMsg('✅ Assignment Approved! Students can now submit solutions.')
-      fetchAnalytics()
-    } catch (err) {
-      setFacMsg(`❌ Error: ${err.message}`)
-    } finally {
-      setFacLoading(false)
-    }
-  }
-
-  const getAgentOutput = (name) => {
-    if (!reportData || !reportData.agents) return null
-    return reportData.agents.find(a => a.agent_name === name)
-  }
-
-  const assessmentOutput = getAgentOutput('assessment_agent')
-  const mentorOutput = getAgentOutput('mentor_agent')
-  const optOutput = getAgentOutput('optimization_agent')
-  const vivaOutput = getAgentOutput('viva_agent')
-  const integrityOutput = getAgentOutput('integrity_agent')
-
-  const assessmentDetails = assessmentOutput?.details || {}
-  const mentorDetails = mentorOutput?.details || {}
-  const optDetails = optOutput?.details || {}
-  const vivaDetails = vivaOutput?.details || {}
-  const integrityDetails = integrityOutput?.details || {}
-
+  // =========================================================================
+  // VIEW 1: AUTHENTICATION SCREEN
+  // =========================================================================
   if (!isAuthenticated) {
     return (
-      <div className="login-container">
-        <div className="glass-card login-card">
-          <div style={{ textAlign: 'center', marginBottom: 24 }}>
-            <h1 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: 6 }}>
+      <div data-theme={theme} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--bg-app)' }}>
+        <div className="glass-card login-card" style={{ maxWidth: 460, width: '100%', padding: '36px 32px' }}>
+          <div style={{ textAlign: 'center', marginBottom: 28 }}>
+            <div style={{
+              width: 52,
+              height: 52,
+              borderRadius: 16,
+              background: 'linear-gradient(135deg, rgba(192, 132, 252, 0.2), rgba(56, 189, 248, 0.2))',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 12,
+              border: '1px solid rgba(192, 132, 252, 0.3)'
+            }}>
+              <School size={28} color="var(--accent-purple)" />
+            </div>
+            <h1 style={{ fontSize: '1.9rem', fontWeight: 800, marginBottom: 6, letterSpacing: '-0.02em' }}>
               CodeMentor <span className="gradient-text">AI</span>
             </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              Sign in to access Faculty & Student Intelligence Portal
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem' }}>
+              Faculty Intelligence & Assignment Management Portal
             </p>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-            <button
-              type="button"
-              className={`role-pill ${userRole === 'faculty' ? 'active-faculty' : ''}`}
-              onClick={() => handleRoleTabChange('faculty')}
-            >
-              🏫 Faculty Module
-            </button>
-            <button
-              type="button"
-              className={`role-pill ${userRole === 'student' ? 'active-student' : ''}`}
-              onClick={() => handleRoleTabChange('student')}
-            >
-              🎓 Student Portal
-            </button>
           </div>
 
           <form onSubmit={handleLoginSubmit}>
             <div className="input-group">
-              <label>Username / Institutional Email</label>
+              <label>Faculty Email / Institutional ID</label>
               <input
                 type="text"
                 className="form-input"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="Username or email"
+                placeholder="faculty@codementor.edu"
                 required
               />
             </div>
@@ -329,27 +408,14 @@ function App() {
               />
             </div>
 
-            {userRole === 'student' && (
-              <div className="input-group">
-                <label>Student ID</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={studentId}
-                  onChange={(e) => setStudentId(e.target.value)}
-                  placeholder="101"
-                />
-              </div>
-            )}
-
             {loginError && (
-              <div style={{ color: 'var(--accent-rose)', fontSize: '0.85rem', marginBottom: 16 }}>
+              <div style={{ color: 'var(--accent-rose)', fontSize: '0.85rem', marginBottom: 16, background: 'rgba(244, 63, 94, 0.1)', padding: 10, borderRadius: 8 }}>
                 ⚠️ {loginError}
               </div>
             )}
 
-            <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}>
-              Sign In to {userRole === 'faculty' ? 'Faculty Module' : 'Student Portal'} →
+            <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}>
+              Sign In to Faculty Dashboard →
             </button>
           </form>
         </div>
@@ -357,579 +423,198 @@ function App() {
     )
   }
 
+  // =========================================================================
+  // VIEW 2: AUTHENTICATED FACULTY DASHBOARD
+  // =========================================================================
   return (
-    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '32px 24px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
-      <header className="glass-card" style={{ padding: '16px 28px', marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ fontSize: '1.4rem', fontWeight: 700 }}>
-            CodeMentor <span className="gradient-text">AI</span>
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-            {userRole === 'faculty' ? 'Faculty Intelligence & Question Setup Module' : 'Student Socratic Assessment Portal'}
-          </p>
-        </div>
+    <div data-theme={theme} style={{ minHeight: '100vh', background: 'var(--bg-app)', transition: 'background-color 0.25s ease' }}>
+      <div style={{ maxWidth: 1340, margin: '0 auto', padding: '32px 24px', width: '100%', boxSizing: 'border-box' }}>
+        {/* Navbar */}
+        <Navbar
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          onResetData={handleResetAllData}
+          isLoading={facLoading}
+        />
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <div style={{ background: '#090d16', padding: '6px 14px', borderRadius: 20, border: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>👤 {currentUser?.name}</span>
-            <span className={`tag ${currentUser?.role === 'faculty' ? 'tag-emerald' : 'tag-blue'}`} style={{ fontSize: '0.7rem' }}>
-              {currentUser?.role?.toUpperCase()}
-            </span>
-          </div>
+        {/* Analytics Metric Cards */}
+        <AnalyticsCards analytics={analytics} />
 
-          <button className="btn-outline" onClick={handleLogout} style={{ color: 'var(--accent-rose)', borderColor: 'rgba(244, 63, 94, 0.3)' }}>
-            🔒 Logout
-          </button>
-        </div>
-      </header>
+        {/* Workspace Segmented Navigation */}
+        <WorkspaceTabs
+          activeView={activeView}
+          onChangeView={setActiveView}
+          assignmentsCount={questionsList.length}
+          pendingCount={analytics?.pending_submissions || 0}
+        />
 
-      {userRole === 'faculty' && (
-        <div>
-          {analytics && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
-              <div className="glass-card" style={{ padding: 20, textAlign: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Assignments</span>
-                <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--accent-purple)' }}>{analytics.assignments_total}</div>
+        {/* VIEW 1: ASSIGNMENTS & CURRICULUM */}
+        {activeView === 'assignments' && (
+          <AssignmentsView
+            questionsList={questionsList}
+            currentQuestion={currentQuestion}
+            onSelectAssignment={handleSelectAssignment}
+            onCreateQuestion={handleCreateQuestion}
+            onUpdateDraftTests={handleUpdateDraftTests}
+            onApprove={handleApprove}
+            onDelete={handleDeleteQuestion}
+            onNavigateToSubmissions={(qId) => {
+              handleSelectAssignment(qId)
+              setActiveView('submissions')
+            }}
+            onNavigateToInsights={(qId) => {
+              handleSelectAssignment(qId)
+              setActiveView('insights')
+            }}
+            title={title}
+            setTitle={setTitle}
+            facLanguage={facLanguage}
+            setFacLanguage={setFacLanguage}
+            description={description}
+            setDescription={setDescription}
+            isLoading={facLoading}
+          />
+        )}
+
+        {/* VIEW 2: SUBMISSIONS & GRADING */}
+        {activeView === 'submissions' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+              <div>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+                  Active Evaluation Queue
+                </span>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  {currentQuestion ? currentQuestion.title : 'All Submissions'}
+                </h2>
               </div>
-              <div className="glass-card" style={{ padding: 20, textAlign: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Approved Questions</span>
-                <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--accent-emerald)' }}>{analytics.approved_assignments}</div>
-              </div>
-              <div className="glass-card" style={{ padding: 20, textAlign: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Student Submissions</span>
-                <div style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--accent-blue)' }}>{analytics.submissions_total}</div>
-              </div>
-              <div className="glass-card" style={{ padding: 20, textAlign: 'center' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Pending Evaluation</span>
-                <div style={{ fontSize: '1.8rem', fontWeight: 700, color: '#f59e0b' }}>{analytics.pending_submissions}</div>
-              </div>
-            </div>
-          )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: 28 }}>
-            <section className="glass-card" style={{ padding: 24 }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16 }}>1. Create Assignment Draft</h2>
-
-              <form onSubmit={handleCreateQuestion} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <div>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>Question Title</label>
-                  <input
-                    style={{ background: '#090d16', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 8, padding: '10px 14px', width: '100%' }}
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Find Two Sum Indices"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>Target Language</label>
+              {questionsList.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Target Assignment:</label>
                   <select
-                    style={{ background: '#090d16', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 8, padding: '10px 14px', width: '100%' }}
-                    value={facLanguage}
-                    onChange={(e) => setFacLanguage(e.target.value)}
+                    value={assignmentId}
+                    onChange={(e) => handleSelectAssignment(e.target.value)}
+                    className="form-input"
+                    style={{ width: 'auto', padding: '6px 12px', fontSize: '0.84rem' }}
                   >
-                    <option value="python">Python 3</option>
-                    <option value="java">Java</option>
-                    <option value="c">C</option>
+                    {questionsList.map(q => (
+                      <option key={q.id} value={q.id}>#{q.id} - {q.title}</option>
+                    ))}
                   </select>
-                </div>
 
-                <div>
-                  <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>Description & Constraints</label>
-                  <textarea
-                    style={{ background: '#090d16', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 8, padding: '10px 14px', width: '100%' }}
-                    rows={5}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Given an array of integers and a target sum, return indices of two numbers..."
-                  />
-                </div>
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                    onClick={() => setActiveView('insights')}
+                  >
+                    <span>View Class Insights</span>
+                    <ArrowRight size={13} />
+                  </button>
 
-                <button className="btn-primary" type="submit" disabled={facLoading}>
-                  {facLoading ? 'Generating AI Drafts...' : 'Create Draft & Generate AI Test/Viva Bank'}
-                </button>
-              </form>
-            </section>
-
-            <section className="glass-card" style={{ padding: 24 }}>
-              <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16 }}>2. AI Draft Review & Approval</h2>
-
-              {facMsg && (
-                <div style={{ padding: 12, borderRadius: 8, background: '#090d16', border: '1px solid var(--border-color)', marginBottom: 16, fontSize: '0.9rem' }}>
-                  {facMsg}
-                </div>
-              )}
-
-              {currentQuestion ? (
-                <div>
-                  <div style={{ background: '#090d16', padding: 16, borderRadius: 12, marginBottom: 16, border: '1px solid var(--border-color)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 600 }}>{currentQuestion.title}</h3>
-                      <span style={{ fontSize: '0.8rem', padding: '4px 10px', borderRadius: 20, background: currentQuestion.is_approved ? 'rgba(52, 211, 153, 0.2)' : 'rgba(251, 191, 36, 0.2)', color: currentQuestion.is_approved ? 'var(--accent-emerald)' : '#f59e0b' }}>
-                        {currentQuestion.is_approved ? 'APPROVED' : 'DRAFT'}
-                      </span>
-                    </div>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>ID: {currentQuestion.id} | Language: {currentQuestion.language}</p>
-                    <p style={{ fontSize: '0.9rem', marginTop: 8 }}>{currentQuestion.description}</p>
-                  </div>
-
-                  <div style={{ marginBottom: 16 }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 8, color: 'var(--accent-blue)' }}>
-                      Draft Test Cases (Generated by TestCase Agent):
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {currentQuestion.draft_tests?.map((t, idx) => (
-                        <div key={idx} style={{ background: '#090d16', padding: 12, borderRadius: 8, fontSize: '0.85rem' }}>
-                          <div><strong>Input:</strong> {t.input}</div>
-                          <div><strong>Expected Output:</strong> {t.expected_output}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div style={{ marginBottom: 20 }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 8, color: 'var(--accent-purple)' }}>
-                      Draft Viva Question Bank (Generated by Viva Question Agent):
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {currentQuestion.draft_viva?.map((v, idx) => (
-                        <div key={idx} style={{ background: '#090d16', padding: 12, borderRadius: 8, fontSize: '0.85rem' }}>
-                          <div><strong>Q{idx + 1}:</strong> {v.prompt}</div>
-                          <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: 4 }}>
-                            Concepts: {v.expected_concepts?.join(', ')}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {!currentQuestion.is_approved && (
-                    <button className="btn-primary" onClick={handleApprove} disabled={facLoading} style={{ width: '100%' }}>
-                      {facLoading ? 'Approving...' : 'Approve Question for Student Submissions ✅'}
+                  {assignmentId && (
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ fontSize: '0.8rem', padding: '6px 12px', color: 'var(--accent-rose)', borderColor: 'rgba(244, 63, 94, 0.3)' }}
+                      onClick={() => handleDeleteQuestion(parseInt(assignmentId, 10))}
+                      title="Delete this assignment"
+                    >
+                      <Trash2 size={13} />
+                      <span>Delete</span>
                     </button>
                   )}
                 </div>
-              ) : (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                  Create an assignment draft on the left to inspect AI-generated test cases and viva question banks.
-                </p>
               )}
+            </div>
+
+            <section className="glass-card" style={{ padding: 24 }}>
+              <SubmissionsTable
+                submissions={facultyIntelligence?.consolidated_submissions || []}
+                assignmentId={assignmentId}
+                assignmentTitle={currentQuestion?.title}
+                onInspectSubmission={(s) => setInspectSubmission(s)}
+                onDeleteSubmission={handleDeleteSubmission}
+              />
             </section>
           </div>
+        )}
 
-          {/* ========================================================================= */}
-          {/* SECTION 3: FACULTY INTELLIGENCE & CLASS MISCONCEPTION ANALYTICS          */}
-          {/* ========================================================================= */}
-          <section className="glass-card" style={{ padding: 24, marginTop: 28 }}>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16 }}>
-              📊 3. Class-Wide Misconception Analytics & Consolidated Submissions
-            </h2>
-
-            {facultyIntelligence ? (
+        {/* VIEW 3: CLASS INSIGHTS & ANALYTICS */}
+        {activeView === 'insights' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
-                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Class Avg Correctness</span>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-emerald)', marginTop: 4 }}>
-                      {facultyIntelligence.class_averages?.correctness || 0}%
-                    </div>
-                  </div>
-                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Class Avg Quality</span>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-blue)', marginTop: 4 }}>
-                      {facultyIntelligence.class_averages?.standards || 0}%
-                    </div>
-                  </div>
-                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Submissions</span>
-                    <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-purple)', marginTop: 4 }}>
-                      {facultyIntelligence.total_submissions}
-                    </div>
-                  </div>
-                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Top Grade Band</span>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#f59e0b', marginTop: 4 }}>
-                      {Object.keys(facultyIntelligence.grade_distribution || {}).reduce((a, b) => (facultyIntelligence.grade_distribution[a] > facultyIntelligence.grade_distribution[b] ? a : b), 'good').toUpperCase()}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, marginBottom: 24 }}>
-                  <div style={{ background: '#090d16', padding: 18, borderRadius: 12, border: '1px solid var(--border-color)' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-rose)', marginBottom: 12 }}>
-                      ⚠️ Top Class Misconceptions & Error Clusters
-                    </h3>
-                    {facultyIntelligence.top_misconceptions && facultyIntelligence.top_misconceptions.length > 0 ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        {facultyIntelligence.top_misconceptions.map((item, idx) => (
-                          <div key={idx} style={{ background: 'rgba(244, 63, 94, 0.08)', padding: 12, borderRadius: 8, border: '1px solid rgba(244, 63, 94, 0.2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                              <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>{item.misconception}</div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Affected: {item.affected_students_count} student(s)</div>
-                            </div>
-                            <span className="tag tag-rose" style={{ fontSize: '0.8rem' }}>{item.percentage_of_class}%</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>No common misconceptions flagged yet.</p>
-                    )}
-                  </div>
-
-                  <div style={{ background: '#090d16', padding: 18, borderRadius: 12, border: '1px solid var(--border-color)' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-blue)', marginBottom: 12 }}>
-                      📈 Performance Distribution
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {Object.entries(facultyIntelligence.grade_distribution || {}).map(([band, count], idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                          <span style={{ width: 130, fontSize: '0.8rem', color: 'var(--text-muted)' }}>{band.toUpperCase()}</span>
-                          <div style={{ flex: 1, background: '#1e293b', height: 12, borderRadius: 6, overflow: 'hidden' }}>
-                            <div style={{ width: `${(count / Math.max(1, facultyIntelligence.total_submissions)) * 100}%`, height: '100%', background: band === 'excellent' ? 'var(--accent-emerald)' : band === 'good' ? 'var(--accent-blue)' : band === 'fair' ? '#f59e0b' : 'var(--accent-rose)' }} />
-                          </div>
-                          <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: 12 }}>
-                  📋 Consolidated Submissions & Grade Override Table
-                </h3>
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
-                    <thead>
-                      <tr style={{ background: '#090d16', borderBottom: '1px solid var(--border-color)' }}>
-                        <th style={{ padding: '10px 12px' }}>Sub ID</th>
-                        <th style={{ padding: '10px 12px' }}>Student</th>
-                        <th style={{ padding: '10px 12px' }}>Correctness</th>
-                        <th style={{ padding: '10px 12px' }}>Integrity Risk</th>
-                        <th style={{ padding: '10px 12px' }}>AI Grade Rec</th>
-                        <th style={{ padding: '10px 12px' }}>Final Grade</th>
-                        <th style={{ padding: '10px 12px' }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {facultyIntelligence.consolidated_submissions?.map((s) => (
-                        <tr key={s.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                          <td style={{ padding: '10px 12px' }}>#{s.id}</td>
-                          <td style={{ padding: '10px 12px' }}>Student #{s.student_id}</td>
-                          <td style={{ padding: '10px 12px' }}>{s.correctness_score !== null ? `${s.correctness_score}%` : 'N/A'}</td>
-                          <td style={{ padding: '10px 12px' }}>
-                            <span className={`tag ${s.integrity_risk === 'high' ? 'tag-rose' : s.integrity_risk === 'moderate' ? 'tag-amber' : 'tag-emerald'}`}>
-                              {s.integrity_risk.toUpperCase()}
-                            </span>
-                          </td>
-                          <td style={{ padding: '10px 12px' }}>
-                            <span className="tag tag-blue">{s.overall_recommendation.toUpperCase()}</span>
-                          </td>
-                          <td style={{ padding: '10px 12px' }}>
-                            {s.final_grade ? (
-                              <span className="tag tag-emerald">✅ {s.final_grade.toUpperCase()} ({s.faculty_score ?? ''})</span>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>Pending Override</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '10px 12px' }}>
-                            <button
-                              className="btn-outline"
-                              style={{ fontSize: '0.75rem', padding: '4px 10px' }}
-                              onClick={() => setOverrideSubId(s.id)}
-                            >
-                              ✏️ Override Grade
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                {overrideSubId && (
-                  <div style={{ marginTop: 20, background: '#090d16', padding: 20, borderRadius: 12, border: '1px solid var(--accent-purple)' }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, color: 'var(--accent-purple)', marginBottom: 12 }}>
-                      ✏️ Instructor Override for Submission #{overrideSubId}
-                    </h4>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 12, marginBottom: 12 }}>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Override Score (0-100)</label>
-                        <input
-                          type="number"
-                          value={overrideScore}
-                          onChange={(e) => setOverrideScore(e.target.value)}
-                          style={{ background: '#1e293b', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 10px', width: '100%' }}
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Final Grade Band</label>
-                        <select
-                          value={overrideGrade}
-                          onChange={(e) => setOverrideGrade(e.target.value)}
-                          style={{ background: '#1e293b', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 10px', width: '100%' }}
-                        >
-                          <option value="excellent">Excellent</option>
-                          <option value="good">Good</option>
-                          <option value="fair">Fair</option>
-                          <option value="needs_improvement">Needs Improvement</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>Instructor Feedback / Override Notes</label>
-                        <input
-                          type="text"
-                          value={overrideNotes}
-                          onChange={(e) => setOverrideNotes(e.target.value)}
-                          style={{ background: '#1e293b', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 10px', width: '100%' }}
-                        />
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                      <button className="btn-outline" style={{ fontSize: '0.8rem' }} onClick={() => setOverrideSubId(null)}>Cancel</button>
-                      <button className="btn-primary" style={{ fontSize: '0.8rem' }} onClick={() => handleOverrideSubmit(overrideSubId)}>Save Grade Override ✅</button>
-                    </div>
-                  </div>
-                )}
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>
+                  Learning Diagnostics
+                </span>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                  Class Misconception & Performance Analytics
+                </h2>
               </div>
-            ) : (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Select or create an assignment to view class misconception analytics and student override options.</p>
-            )}
-          </section>
-        </div>
-      )}
 
-      {userRole === 'student' && (
-        <div style={{ display: 'grid', gridTemplateColumns: reportData ? '1fr 1.2fr' : '1fr', gap: 28 }}>
-          <section className="glass-card" style={{ padding: 24 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-                <h2 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Code Workspace</h2>
-                <div>
-                  <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginRight: 6 }}>Assignment ID:</label>
-                  <input
-                    type="number"
+              {questionsList.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>Target Assignment:</label>
+                  <select
                     value={assignmentId}
-                    onChange={(e) => setAssignmentId(e.target.value)}
-                    style={{ background: '#090d16', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '4px 8px', width: 60 }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <select
-                  value={language}
-                  onChange={(e) => handleLanguageChange(e.target.value)}
-                  style={{ background: '#090d16', color: '#fff', border: '1px solid var(--border-color)', borderRadius: 6, padding: '6px 12px' }}
-                >
-                  <option value="python">Python 3</option>
-                  <option value="java">Java</option>
-                  <option value="c">C</option>
-                </select>
-
-                <button
-                  onClick={() => setSourceCode(SAMPLE_CODE[language] || '')}
-                  style={{ background: 'transparent', color: 'var(--accent-blue)', border: 'none', cursor: 'pointer', fontSize: '0.85rem' }}
-                >
-                  Load Sample Code
-                </button>
-              </div>
-            </div>
-
-            <textarea
-              className="code-editor-textarea"
-              rows={18}
-              value={sourceCode}
-              onChange={(e) => setSourceCode(e.target.value)}
-              placeholder="Type or paste your code here..."
-            />
-
-            {errorMsg && (
-              <div style={{ marginTop: 16, padding: 14, borderRadius: 10, background: 'rgba(244, 63, 94, 0.15)', border: '1px solid var(--accent-rose)', color: '#fda4af', fontSize: '0.9rem' }}>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠️ {errorMsg}</div>
-                {errorMsg.includes('not approved') && (
-                  <div style={{ fontSize: '0.85rem', marginTop: 6, color: '#f8fafc' }}>
-                    💡 <strong>Quick Fix:</strong> Switch to the <strong>Faculty Module</strong> above, create Assignment #{assignmentId}, and click <strong>Approve Question</strong>!
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div style={{ marginTop: 20, display: 'flex', justifyContent: 'flex-end' }}>
-              <button className="btn-primary" onClick={handleStudentSubmit} disabled={submitting}>
-                {submitting ? 'Running Assessment Pipeline...' : 'Submit Code for AI Feedback ✨'}
-              </button>
-            </div>
-          </section>
-
-          {reportData && (
-            <section className="glass-card" style={{ padding: 24 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-                <div style={{ background: '#090d16', padding: 16, borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Correctness</span>
-                  <div className={`score-badge ${assessmentDetails.overall_recommendation || 'good'}`}>
-                    {assessmentDetails.correctness_score ?? 0}%
-                  </div>
-                </div>
-                <div style={{ background: '#090d16', padding: 16, borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Code Standards</span>
-                  <div className="score-badge good">
-                    {assessmentDetails.standards_score ?? 100}%
-                  </div>
-                </div>
-                <div style={{ background: '#090d16', padding: 16, borderRadius: 12, textAlign: 'center', border: '1px solid var(--border-color)' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Efficiency</span>
-                  <div className="score-badge fair">
-                    {assessmentDetails.efficiency_score ?? 75}%
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--border-color)', paddingBottom: 12, marginBottom: 20 }}>
-                <button
-                  onClick={() => setActiveTab('mentor')}
-                  className={`tag ${activeTab === 'mentor' ? 'tag-blue' : ''}`}
-                  style={{ cursor: 'pointer', background: activeTab === 'mentor' ? undefined : 'transparent', border: activeTab === 'mentor' ? undefined : 'none' }}
-                >
-                  🧠 Socratic Mentor
-                </button>
-                <button
-                  onClick={() => setActiveTab('optimization')}
-                  className={`tag ${activeTab === 'optimization' ? 'tag-emerald' : ''}`}
-                  style={{ cursor: 'pointer', background: activeTab === 'optimization' ? undefined : 'transparent', border: activeTab === 'optimization' ? undefined : 'none' }}
-                >
-                  ⚡ Optimization
-                </button>
-                <button
-                  onClick={() => setActiveTab('viva')}
-                  className={`tag ${activeTab === 'viva' ? 'tag-amber' : ''}`}
-                  style={{ cursor: 'pointer', background: activeTab === 'viva' ? undefined : 'transparent', border: activeTab === 'viva' ? undefined : 'none' }}
-                >
-                  🎙️ Viva Defense
-                </button>
-                <button
-                  onClick={() => setActiveTab('assessment')}
-                  className={`tag ${activeTab === 'assessment' ? 'tag-rose' : ''}`}
-                  style={{ cursor: 'pointer', background: activeTab === 'assessment' ? undefined : 'transparent', border: activeTab === 'assessment' ? undefined : 'none' }}
-                >
-                  📋 Assessment
-                </button>
-              </div>
-
-              {activeTab === 'mentor' && (
-                <div>
-                  <div style={{ background: 'rgba(56, 189, 248, 0.1)', borderLeft: '4px solid var(--accent-blue)', padding: 16, borderRadius: '0 8px 8px 0', marginBottom: 20 }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent-blue)', marginBottom: 4 }}>Growth Mindset Guidance</h3>
-                    <p style={{ fontSize: '0.9rem' }}>{mentorOutput?.summary || 'No encouragement generated.'}</p>
-                  </div>
-
-                  <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 12 }}>Guiding Socratic Hints:</h4>
-                  {mentorDetails.hints && mentorDetails.hints.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      {mentorDetails.hints.map((hint, idx) => (
-                        <div key={idx} style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <span className="tag tag-amber">{hint.topic}</span>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Review: {hint.concept_to_review}</span>
-                          </div>
-                          <p style={{ fontSize: '0.9rem', fontStyle: 'italic' }}>"{hint.socratic_question}"</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>🎉 Excellent code! No failed test hints generated.</p>
-                  )}
-
-                  {mentorDetails.suggested_reading && mentorDetails.suggested_reading.length > 0 && (
-                    <div style={{ marginTop: 20 }}>
-                      <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: 8, color: 'var(--accent-purple)' }}>Recommended Topics to Review:</h4>
-                      <ul style={{ paddingLeft: 20, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                        {mentorDetails.suggested_reading.map((topic, i) => (
-                          <li key={i} style={{ marginBottom: 4 }}>{topic}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'optimization' && (
-                <div>
-                  <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-                    <div style={{ background: '#090d16', padding: 12, borderRadius: 8, flex: 1, border: '1px solid var(--border-color)' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Time Complexity</span>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-emerald)' }}>
-                        {optDetails.estimated_time_complexity || 'O(n)'}
-                      </div>
-                    </div>
-                    <div style={{ background: '#090d16', padding: 12, borderRadius: 8, flex: 1, border: '1px solid var(--border-color)' }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Space Complexity</span>
-                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--accent-blue)' }}>
-                        {optDetails.estimated_space_complexity || 'O(1)'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: 16 }}>{optOutput?.summary}</p>
-
-                  <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 12 }}>Performance Recommendations:</h4>
-                  <ul style={{ paddingLeft: 20, fontSize: '0.9rem' }}>
-                    {optOutput?.recommendations?.map((rec, i) => (
-                      <li key={i} style={{ marginBottom: 8 }}>{rec}</li>
+                    onChange={(e) => handleSelectAssignment(e.target.value)}
+                    className="form-input"
+                    style={{ width: 'auto', padding: '6px 12px', fontSize: '0.84rem' }}
+                  >
+                    {questionsList.map(q => (
+                      <option key={q.id} value={q.id}>#{q.id} - {q.title}</option>
                     ))}
-                  </ul>
+                  </select>
+
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    style={{ fontSize: '0.8rem', padding: '6px 12px' }}
+                    onClick={() => setActiveView('submissions')}
+                  >
+                    <span>Grade Submissions</span>
+                    <ArrowRight size={13} />
+                  </button>
                 </div>
               )}
+            </div>
 
-              {activeTab === 'viva' && (
-                <div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 16 }}>
-                    {vivaDetails.guidance_for_faculty || 'Select questions for oral defense.'}
-                  </p>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {vivaDetails.selected_questions && vivaDetails.selected_questions.length > 0 ? (
-                      vivaDetails.selected_questions.map((q, idx) => (
-                        <div key={idx} style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                          <h4 style={{ fontSize: '0.95rem', color: 'var(--accent-amber)', marginBottom: 6 }}>
-                            Q{idx + 1}: {q.prompt}
-                          </h4>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: 8 }}>
-                            Why Selected: {q.personalization_reason}
-                          </p>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {q.expected_concepts?.map((c, ci) => (
-                              <span key={ci} className="tag tag-blue" style={{ fontSize: '0.75rem' }}>{c}</span>
-                            ))}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      vivaOutput?.recommendations?.map((r, idx) => (
-                        <div key={idx} style={{ background: '#090d16', padding: 14, borderRadius: 8, fontSize: '0.9rem' }}>
-                          🗣️ {r}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'assessment' && (
-                <div>
-                  <p style={{ fontSize: '0.9rem', marginBottom: 16 }}>
-                    <strong>Recommendation Band:</strong> <span className={`tag tag-${assessmentDetails.overall_recommendation === 'excellent' ? 'emerald' : 'amber'}`}>{assessmentDetails.overall_recommendation}</span>
-                  </p>
-                  <div style={{ background: '#090d16', padding: 16, borderRadius: 10, border: '1px solid var(--border-color)' }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: 8 }}>Assessment Summary:</h4>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{assessmentDetails.justification_text || assessmentOutput?.summary}</p>
-                  </div>
-                </div>
-              )}
+            <section className="glass-card" style={{ padding: 24 }}>
+              <MisconceptionAnalytics
+                facultyIntelligence={facultyIntelligence}
+                assignmentId={assignmentId}
+              />
             </section>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+
+        {/* Submission Inspector Modal */}
+        <SubmissionInspectorModal
+          submission={inspectSubmission}
+          isOpen={!!inspectSubmission}
+          onClose={() => setInspectSubmission(null)}
+          onSaveOverride={handleSaveOverride}
+          theme={theme === 'light' ? 'light' : 'vs-dark'}
+        />
+
+        {/* Reusable Confirmation Modal */}
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          isDanger={confirmModal.isDanger}
+          onConfirm={confirmModal.onConfirm}
+          onCancel={() => setConfirmModal({ isOpen: false })}
+        />
+
+        {/* Floating Toast Alerts */}
+        <Toast toasts={toasts} onDismiss={dismissToast} />
+      </div>
     </div>
   )
 }

@@ -146,15 +146,29 @@ Execute the full automated test suite covering all 6 modules (Adapters, Integrit
 python -m pytest
 ```
 
-### Run Live System Verification Script
+### Reset Database & Application Data
 
-Verify live API endpoint routes, agent execution pipelines, and database interactions:
+To wipe all student submissions, evaluation reports, test cases, and assignments (while keeping default development login accounts intact):
 
+**PowerShell (Windows):**
+```powershell
+# Interactive prompt
+.\reset_data.ps1
+
+# Non-interactive / Force mode
+.\reset_data.ps1 -Force
+
+# Also wipe Docker PostgreSQL volume
+.\reset_data.ps1 -Docker
+```
+
+**Bash / Linux / macOS / WSL:**
 ```bash
-python backend/test_live_system.py
+./reset_data.sh
 ```
 
 ---
+
 
 ## 📁 Project Directory Structure
 
@@ -174,8 +188,14 @@ CodeMentor_AI/
 │   ├── student-portal/    # React Student UI (Submissions, Code Editor, Viva Chat)
 │   └── faculty-dashboard/ # React Faculty UI (Misconceptions Analytics, Class Metrics, Overrides)
 ├── alembic/               # Database schema migration scripts
+├── docs/                  # System architecture, agent roadmaps, setup guides & presentations
+│   ├── architecture/      # Detailed file structures & module guides
+│   ├── agent_plans/       # Multi-agent design plans & checklists
+│   ├── guides/            # Developer setup & execution manuals
+│   └── presentation/      # Defense slides & project archives
 ├── .env                   # Environment variables configuration
 ├── docker-compose.yml     # Multi-container production deployment definition
-├── REMAINING_WORK.md      # Module completion & test verification status report
-└── RUNNING_INSTRUCTIONS.md # Project setup and usage instructions
+├── run.ps1 / run.sh       # Unified container runner scripts
+├── reset_data.ps1 / .sh   # Database reset utility
+└── README.md              # Project entry point and quick start
 ```

@@ -7,7 +7,7 @@
 
 ## Quick Start Guide
 
-Full instructions are available in [RUNNING_INSTRUCTIONS.md](file:///d:/mca_mini_vijil/CodeMentor_AI/RUNNING_INSTRUCTIONS.md).
+Full instructions are available in [RUNNING_INSTRUCTIONS.md](docs/guides/RUNNING_INSTRUCTIONS.md).
 
 ### 1. Environment Configuration
 
@@ -69,7 +69,7 @@ docker compose up --build
 - **Faculty Dashboard**: `http://localhost:4174`
 - **PostgreSQL Database**: `localhost:5432`
 
-### 5. Run the Test Suite (90/90 Passed)
+### 5. Run the Test Suite (95/95 Passed)
 
 ```bash
 python -m pytest
@@ -77,4 +77,14 @@ python -m pytest
 
 ---
 
-For detailed module completion verification and presentation compliance, see [REMAINING_WORK.md](file:///d:/mca_mini_vijil/CodeMentor_AI/REMAINING_WORK.md).
+## 📚 Project Documentation & Resources
+
+All supplementary documentation, agent roadmaps, architecture guides, and academic assets are organized inside [`docs/`](docs/):
+
+| Category | Location | Description |
+| :--- | :--- | :--- |
+| **System Architecture** | [`docs/architecture/`](docs/architecture/) | [System Modules & Architecture](docs/architecture/PROJECT_STRUCTURE_AND_MODULES.md), [File Structures & Functions](docs/architecture/FILE_STRUCTURE_AND_FUNCTIONS.md) |
+| **Agent Design Plans** | [`docs/agent_plans/`](docs/agent_plans/) | [Assessment Agent Plan](docs/agent_plans/PLAN_ASSESSMENT_AGENT.md), [Mentor Agent Plan](docs/agent_plans/PLAN_MENTOR_AGENT.md), [Remaining Work / Checklist](docs/agent_plans/REMAINING_WORK.md) |
+| **Setup & Guides** | [`docs/guides/`](docs/guides/) | [Comprehensive Running Instructions](docs/guides/RUNNING_INSTRUCTIONS.md) |
+| **Presentation Assets** | [`docs/presentation/`](docs/presentation/) | Project Defense Slides ([PDF](docs/presentation/Vijil_mini_ppt.pdf), [ZIP Archive](docs/presentation/Vijil_mini_ppt.zip)) |
+

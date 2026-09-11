@@ -68,3 +68,18 @@ def test_faculty_intelligence_and_override_flow():
     assert sub1_item["final_grade"] == "excellent"
     assert sub1_item["faculty_score"] == 95
     assert sub1_item["faculty_notes"] == "Verified in oral viva examination"
+
+    # Teardown: Clean up test artifacts to keep database pristine
+    import backend.db.session as session_module
+    db = session_module.SessionLocal()
+    try:
+        sub_ids = [sub1_id, sub2.json()["id"]]
+        db.query(models.Report).filter(models.Report.submission_id.in_(sub_ids)).delete(synchronize_session=False)
+        db.query(models.Submission).filter(models.Submission.assignment_id == q_id).delete(synchronize_session=False)
+        db.query(models.TestCase).filter(models.TestCase.assignment_id == q_id).delete(synchronize_session=False)
+        db.query(models.VivaQuestion).filter(models.VivaQuestion.assignment_id == q_id).delete(synchronize_session=False)
+        db.query(models.Assignment).filter(models.Assignment.id == q_id).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+

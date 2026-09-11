@@ -75,20 +75,103 @@ def viva_question_agent(
     ]
 
 
+def evaluate_viva_answers(
+    viva_answers: List[Dict[str, Any]],
+    approved_viva_bank: Optional[List[Dict[str, Any]]] = None
+) -> List[Dict[str, Any]]:
+    """
+    Evaluates student viva answers against expected concepts and reference solutions.
+    For each answer, computes:
+    - detected_concepts: list of concepts identified in student explanation
+    - missing_concepts: list of concepts omitted
+    - correctness_score: 0-100 percentage score based on concept articulation
+    - ai_assessment: 'verified' (>=70%), 'partially_verified' (40-69%), 'needs_expansion' (<40%)
+    - faculty_verification: preserve existing or default to 'pending'
+    """
+    bank_map = {}
+    if approved_viva_bank:
+        for item in approved_viva_bank:
+            if isinstance(item, dict):
+                key = item.get("prompt", "").strip().lower()
+                if key:
+                    bank_map[key] = item
+                if "id" in item:
+                    bank_map[str(item["id"])] = item
+
+    evaluated = []
+    for idx, ans in enumerate(viva_answers):
+        if not isinstance(ans, dict):
+            continue
+
+        prompt = ans.get("prompt") or ans.get("question") or f"Viva Question {idx + 1}"
+        student_ans = (ans.get("student_answer") or ans.get("answer") or "").strip()
+
+        # Look up reference question from bank if missing expected_concepts
+        bank_entry = bank_map.get(prompt.strip().lower(), {})
+        expected = ans.get("expected_concepts") or bank_entry.get("expected_concepts") or []
+        sample_answer = ans.get("sample_answer") or bank_entry.get("sample_answer") or ""
+
+        detected = []
+        missing = []
+        clean_student_ans = student_ans.lower()
+
+        if not student_ans:
+            score = 0
+            missing = list(expected)
+            assessment = "needs_expansion"
+        elif not expected:
+            word_count = len(student_ans.split())
+            score = 85 if word_count >= 15 else (60 if word_count >= 5 else 30)
+            assessment = "verified" if score >= 70 else ("partially_verified" if score >= 40 else "needs_expansion")
+        else:
+            for concept in expected:
+                c_clean = str(concept).strip().lower()
+                words = [w for w in c_clean.replace("-", " ").replace("_", " ").split() if len(w) > 2]
+                if c_clean in clean_student_ans:
+                    detected.append(concept)
+                elif words and any(w in clean_student_ans for w in words):
+                    detected.append(concept)
+                else:
+                    missing.append(concept)
+
+            coverage = len(detected) / len(expected)
+            score = round(coverage * 100)
+            assessment = "verified" if score >= 70 else ("partially_verified" if score >= 40 else "needs_expansion")
+
+        eval_item = {
+            "question_id": str(ans.get("question_id") or f"q_{idx + 1}"),
+            "prompt": prompt,
+            "student_answer": student_ans,
+            "expected_concepts": expected,
+            "sample_answer": sample_answer,
+            "detected_concepts": detected,
+            "missing_concepts": missing,
+            "correctness_score": score,
+            "ai_assessment": assessment,
+            "faculty_verification": ans.get("faculty_verification", "pending"),
+            "faculty_notes": ans.get("faculty_notes", "")
+        }
+        evaluated.append(eval_item)
+
+    return evaluated
+
+
 def viva_agent(
     parsed_submission: ParsedSubmission,
-    approved_viva_bank: Optional[List[Dict[str, Any]]] = None
+    approved_viva_bank: Optional[List[Dict[str, Any]]] = None,
+    student_viva_answers: Optional[List[Dict[str, Any]]] = None
 ) -> AgentOutput:
     """
     Submission-time agent: Selects and personalizes viva questions from the approved viva bank
-    based on features of the student's submission.
+    based on features of the student's submission, and evaluates any student viva answers provided.
     
     Args:
         parsed_submission: Pre-computed submission analysis
         approved_viva_bank: Approved list of viva questions for the assignment
+        student_viva_answers: Optional student verbal/written answers submitted with code
         
     Returns:
-        AgentOutput wrapping VivaReport with selected viva questions and guidance
+        AgentOutput wrapping VivaReport with selected viva questions, evaluated answers, and guidance
     """
     bank = approved_viva_bank or []
     
@@ -140,9 +223,22 @@ def viva_agent(
 
     details_dict = report.model_dump() if hasattr(report, "model_dump") else report.dict()
 
+    evaluated_answers = []
+    avg_viva_score = None
+    if student_viva_answers:
+        evaluated_answers = evaluate_viva_answers(student_viva_answers, bank)
+        scores = [ea["correctness_score"] for ea in evaluated_answers]
+        avg_viva_score = round(sum(scores) / len(scores)) if scores else None
+        details_dict["evaluated_answers"] = evaluated_answers
+        details_dict["avg_viva_score"] = avg_viva_score
+        summary = f"Selected {len(selected)} viva questions; evaluated {len(evaluated_answers)} student viva answers (readiness score: {avg_viva_score}%)"
+    else:
+        summary = f"Selected {len(selected)} personalized viva questions from approved bank"
+
     return AgentOutput(
         agent_name='viva_agent',
-        summary=f'Selected {len(selected)} personalized viva questions from approved bank',
+        summary=summary,
         recommendations=[q.prompt for q in selected],
         details=details_dict
     )
+

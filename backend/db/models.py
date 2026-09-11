@@ -71,6 +71,10 @@ class Submission(Base):
     final_grade = Column(String(50), nullable=True)
     faculty_score = Column(Integer, nullable=True)
     faculty_notes = Column(Text, nullable=True)
+    viva_answers = Column(JSON, default=[])
+    viva_verified = Column(Boolean, default=False)
+    viva_score = Column(Integer, nullable=True)
+    viva_feedback = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
 

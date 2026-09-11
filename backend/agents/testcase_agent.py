@@ -26,10 +26,19 @@ def generate_draft_tests(
     """
     client = llm_client or get_agent_llm_client("testcase_agent")
     system_prompt = (
-        "You are an expert computer science instructor designing automated programming assessment test cases. "
+        "You are an expert computer science instructor designing automated programming assessment test cases.\n"
         "Generate 3 to 4 realistic candidate test cases (standard inputs, edge cases, boundary conditions) as a JSON array of objects, "
-        "where each object has keys: 'input', 'expected_output', 'description', and 'is_hidden'. "
-        "Provide concrete, exact input strings and expected output values so automated test runners can execute them."
+        "where each object has keys: 'input', 'expected_output', 'description', and 'is_hidden'.\n\n"
+        "CRITICAL FORMAT RULES (HackerRank Standard Input/Output Format):\n"
+        "1. The 'input' field MUST be formatted for clean standard input (stdin) reading:\n"
+        "   - NEVER include variable names or assignment syntax (e.g., NEVER write 'arr = ...' or 'target = ...').\n"
+        "   - NEVER include square brackets '[' or ']' or commas separating elements unless the problem explicitly asks for JSON string input.\n"
+        "   - For arrays/lists, format values as space-separated numbers on a single line (e.g., '1 2 3 4 5').\n"
+        "   - Separate subsequent arguments or parameters on subsequent newlines (e.g., Line 1: '1 2 3 4 5' followed by newline and Line 2: '3').\n"
+        "2. The 'expected_output' field MUST be clean standard output (stdout):\n"
+        "   - Provide only the exact expected output value (e.g., '0 1' or '2' or 'true').\n"
+        "   - Do NOT include labels like 'Output:' or variable names.\n"
+        "3. Provide concrete, exact input strings and expected output values so automated test runners can feed stdin and compare stdout."
     )
     user_prompt = f"Title: {title}\nLanguage: {language}\nDescription/Constraints:\n{description}"
 
@@ -52,20 +61,20 @@ def generate_draft_tests(
     clean_title = title.strip() or "Assignment"
     return [
         {
-            "input": f"Sample input for {clean_title}",
-            "expected_output": f"Expected output for {clean_title}",
+            "input": "1 2 3 4 5\n3",
+            "expected_output": "2",
             "description": f"Standard test case for {clean_title}",
             "is_hidden": False
         },
         {
-            "input": f"Edge input for {clean_title}",
-            "expected_output": f"Boundary output for {clean_title}",
+            "input": "10 20 30\n20",
+            "expected_output": "1",
             "description": f"Boundary condition test for {clean_title}",
             "is_hidden": False
         },
         {
-            "input": f"Hidden test for {clean_title}",
-            "expected_output": f"Hidden output for {clean_title}",
+            "input": "5 15 25 35\n99",
+            "expected_output": "-1",
             "description": f"Hidden evaluation test for {clean_title}",
             "is_hidden": True
         }

@@ -38,7 +38,8 @@ async def run_assessment_pipeline(
     parsed_submission: ParsedSubmission,
     sandbox_results: Optional[SandboxResults] = None,
     approved_viva_bank: Optional[List[Dict[str, Any]]] = None,
-    historical_submissions: Optional[List[Dict[str, Any]]] = None
+    historical_submissions: Optional[List[Dict[str, Any]]] = None,
+    student_viva_answers: Optional[List[Dict[str, Any]]] = None
 ) -> List[AgentOutput]:
     """
     Execute submission-time agents. Assessment Agent runs first to produce scores,
@@ -49,6 +50,7 @@ async def run_assessment_pipeline(
         sandbox_results: Sandbox test execution results
         approved_viva_bank: Approved list of viva questions for the assignment
         historical_submissions: Prior submissions for structural integrity comparison
+        student_viva_answers: Optional verbal/written answers submitted by student
     
     Returns:
         List of AgentOutput from each agent in the pipeline
@@ -74,7 +76,7 @@ async def run_assessment_pipeline(
     other_outputs = await asyncio.gather(
         _run_agent_safe("mentor_agent", mentor_agent, parsed_submission, assessment_report=assessment_report),
         _run_agent_safe("optimization_agent", optimization_agent, parsed_submission),
-        _run_agent_safe("viva_agent", viva_agent, parsed_submission, approved_viva_bank=approved_viva_bank),
+        _run_agent_safe("viva_agent", viva_agent, parsed_submission, approved_viva_bank=approved_viva_bank, student_viva_answers=student_viva_answers),
         _run_agent_safe("integrity_agent", integrity_agent, parsed_submission, historical_submissions=historical_submissions),
     )
 

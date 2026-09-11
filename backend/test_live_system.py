@@ -90,9 +90,10 @@ def run_live_test():
     agents_output = status_data.get("details", {}).get("agents", [])
     print(f"\n[OK] Multi-Agent Pipeline Execution ({len(agents_output)} concurrent agents completed):")
     for agent in agents_output:
-        print(f"\n  * Agent: {agent.get('agent_name').upper()}")
-        print(f"    Summary: {agent.get('summary')}")
-        print(f"    Key Recommendations: {agent.get('recommendations')[:2]}")
+        summary_safe = str(agent.get('summary', '')).encode('ascii', 'replace').decode('ascii')
+        recs_safe = [str(r).encode('ascii', 'replace').decode('ascii') for r in (agent.get('recommendations') or [])[:2]]
+        print(f"    Summary: {summary_safe}")
+        print(f"    Key Recommendations: {recs_safe}")
 
     # 7. Fetch Faculty Intelligence & Class Analytics
     print(f"\n6. Faculty fetches Class Misconception Analytics (GET /api/questions/{q_id}/intelligence)...")

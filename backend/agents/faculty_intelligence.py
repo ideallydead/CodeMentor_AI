@@ -1,5 +1,5 @@
 from typing import Dict, Any, List
-from collections import Counter
+from collections import Counter, defaultdict
 from sqlalchemy.orm import Session
 from backend.db import models
 
@@ -17,11 +17,11 @@ def generate_faculty_intelligence(assignment_id: int, db: Session) -> Dict[str, 
             "total_submissions": 0
         }
 
-    submissions = db.query(models.Submission).filter(
+    raw_submissions = db.query(models.Submission).filter(
         models.Submission.assignment_id == assignment_id
     ).all()
 
-    total_submissions = len(submissions)
+    total_submissions = len(raw_submissions)
     if total_submissions == 0:
         return {
             "assignment_id": assignment_id,
@@ -34,26 +34,52 @@ def generate_faculty_intelligence(assignment_id: int, db: Session) -> Dict[str, 
             "consolidated_submissions": []
         }
 
+    # Sort submissions by id ascending to determine student attempt numbers
+    submissions = sorted(raw_submissions, key=lambda s: s.id)
+    student_attempt_counts = {}
+    submission_attempts = {}
+    for sub in submissions:
+        count = student_attempt_counts.get(sub.student_id, 0) + 1
+        student_attempt_counts[sub.student_id] = count
+        submission_attempts[sub.id] = {
+            "attempt_number": count,
+            "is_resubmission": count > 1
+        }
+
     correctness_scores = []
     standards_scores = []
     efficiency_scores = []
     grade_counts = Counter()
-    misconception_counts = Counter()
+    misconception_students = defaultdict(set)
     consolidated = []
 
     for sub in submissions:
+        attempt_info = submission_attempts.get(sub.id, {"attempt_number": 1, "is_resubmission": False})
         sub_info = {
             "id": sub.id,
             "student_id": sub.student_id,
             "status": sub.status,
             "language": sub.language,
             "correctness_score": None,
+            "standards_score": None,
+            "efficiency_score": None,
             "overall_recommendation": "pending",
             "integrity_risk": "low",
+            "is_resubmission": attempt_info["is_resubmission"],
+            "attempt_number": attempt_info["attempt_number"],
             "final_grade": sub.final_grade,
             "faculty_score": sub.faculty_score,
             "faculty_notes": sub.faculty_notes,
-            "created_at": sub.created_at.isoformat() if sub.created_at else None
+            "viva_answers": sub.viva_answers or [],
+            "viva_verified": sub.viva_verified or False,
+            "viva_score": sub.viva_score,
+            "viva_feedback": sub.viva_feedback,
+            "created_at": sub.created_at.isoformat() if sub.created_at else None,
+            "source_code": sub.source_code,
+            "justification_text": None,
+            "all_test_results": [],
+            "flagged_issues": [],
+            "integrity_details": None
         }
 
         if sub.report and sub.report.aggregated_output:
@@ -73,26 +99,48 @@ def generate_faculty_intelligence(assignment_id: int, db: Session) -> Dict[str, 
                         sub_info["correctness_score"] = corr
                     if std is not None:
                         standards_scores.append(std)
+                        sub_info["standards_score"] = std
                     if eff is not None:
                         efficiency_scores.append(eff)
+                        sub_info["efficiency_score"] = eff
                     if rec:
-                        grade_counts[rec] += 1
                         sub_info["overall_recommendation"] = rec
 
-                    # Collect flagged issues as misconceptions
+                    sub_info["justification_text"] = details.get("justification_text")
+                    sub_info["all_test_results"] = details.get("all_test_results") or []
+                    sub_info["flagged_issues"] = details.get("flagged_issues") or []
+
+                    # Collect flagged issues with unique student tracking
                     for issue in details.get("flagged_issues", []):
                         desc = issue.get("description") or issue.get("category", "General Error")
-                        misconception_counts[desc] += 1
+                        misconception_students[desc].add(sub.student_id)
 
                 elif agent_name == "mentor_agent":
-                    # Collect Socratic hint topics
+                    # Collect Socratic hint topics with unique student tracking
                     for hint in details.get("hints", []):
                         topic = hint.get("topic") or hint.get("concept_to_review", "Concept Review")
-                        misconception_counts[f"Concept: {topic}"] += 1
+                        misconception_students[f"Concept: {topic}"].add(sub.student_id)
+
+                elif agent_name == "viva_agent":
+                    if not sub_info["viva_answers"] and details.get("evaluated_answers"):
+                        sub_info["viva_answers"] = details.get("evaluated_answers")
+                    if sub_info["viva_score"] is None and details.get("avg_viva_score") is not None:
+                        sub_info["viva_score"] = details.get("avg_viva_score")
 
                 elif agent_name == "integrity_agent":
                     risk = details.get("risk_level", "low")
                     sub_info["integrity_risk"] = risk
+                    sub_info["integrity_details"] = {
+                        "risk_level": risk,
+                        "max_similarity_score": details.get("max_similarity_score", 0.0),
+                        "matches": details.get("matches") or [],
+                        "explainable_summary": details.get("explainable_summary") or agent.get("summary")
+                    }
+
+        # Tally effective grade: prioritize instructor override if present, else AI recommendation
+        effective_grade = sub.final_grade or sub_info["overall_recommendation"]
+        if effective_grade and effective_grade != "pending":
+            grade_counts[effective_grade] += 1
 
         consolidated.append(sub_info)
 
@@ -100,13 +148,29 @@ def generate_faculty_intelligence(assignment_id: int, db: Session) -> Dict[str, 
     avg_std = round(sum(standards_scores) / len(standards_scores), 1) if standards_scores else 0.0
     avg_eff = round(sum(efficiency_scores) / len(efficiency_scores), 1) if efficiency_scores else 0.0
 
-    # Top class misconceptions
+    # Class viva metrics
+    viva_scores = [s["viva_score"] for s in consolidated if s["viva_score"] is not None]
+    viva_submitted = sum(1 for s in consolidated if s["viva_answers"] and len(s["viva_answers"]) > 0)
+    viva_verified = sum(1 for s in consolidated if s["viva_verified"])
+    avg_viva = round(sum(viva_scores) / len(viva_scores), 1) if viva_scores else 0.0
+
+    viva_summary = {
+        "total_with_viva": viva_submitted,
+        "verified_count": viva_verified,
+        "avg_viva_score": avg_viva,
+        "completion_percentage": round((viva_submitted / total_submissions) * 100.0, 1) if total_submissions else 0.0
+    }
+
+    # Top class misconceptions tracking unique affected students
+    total_unique_students = len({s.student_id for s in submissions})
     top_misconceptions = []
-    for issue_name, count in misconception_counts.most_common(5):
-        percentage = round((count / total_submissions) * 100.0, 1)
+    sorted_misconceptions = sorted(misconception_students.items(), key=lambda x: len(x[1]), reverse=True)
+    for issue_name, student_set in sorted_misconceptions[:5]:
+        student_count = len(student_set)
+        percentage = round((student_count / max(1, total_unique_students)) * 100.0, 1)
         top_misconceptions.append({
             "misconception": issue_name,
-            "affected_students_count": count,
+            "affected_students_count": student_count,
             "percentage_of_class": percentage
         })
 
@@ -127,5 +191,6 @@ def generate_faculty_intelligence(assignment_id: int, db: Session) -> Dict[str, 
             "needs_improvement": grade_counts.get("needs_improvement", 0)
         },
         "top_misconceptions": top_misconceptions,
-        "consolidated_submissions": consolidated
+        "consolidated_submissions": consolidated,
+        "viva_summary": viva_summary
     }

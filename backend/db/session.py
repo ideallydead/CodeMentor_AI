@@ -18,30 +18,48 @@ def _apply_db_migrations(engine):
                 conn.execute(text("ALTER TABLE submissions ADD COLUMN faculty_score INTEGER"))
             if 'faculty_notes' not in columns:
                 conn.execute(text("ALTER TABLE submissions ADD COLUMN faculty_notes TEXT"))
+            if 'viva_answers' not in columns:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN viva_answers JSON"))
+            if 'viva_verified' not in columns:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN viva_verified BOOLEAN DEFAULT FALSE"))
+            if 'viva_score' not in columns:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN viva_score INTEGER"))
+            if 'viva_feedback' not in columns:
+                conn.execute(text("ALTER TABLE submissions ADD COLUMN viva_feedback TEXT"))
+
 
 
 def _seed_initial_data(engine):
-    """Seed initial default users if not present to satisfy FK constraints."""
+    """Seed initial default users (faculty, TAs, and students) if not present to satisfy FK constraints."""
     from backend.db import models
     Session = sessionmaker(bind=engine)
     db = Session()
     try:
-        if not db.query(models.User).filter_by(id=101).first():
-            student = models.User(
-                id=101,
-                email="student101@codementor.edu",
-                hashed_password="hashed_password_placeholder",
-                role="student"
-            )
-            db.add(student)
-        if not db.query(models.User).filter_by(id=1).first():
-            faculty = models.User(
-                id=1,
-                email="faculty@codementor.edu",
-                hashed_password="hashed_password_placeholder",
-                role="faculty"
-            )
-            db.add(faculty)
+        users_to_seed = [
+            # Faculty & Academic Staff
+            {"id": 1, "email": "faculty@codementor.edu", "role": "faculty", "password": "faculty123"},
+            {"id": 2, "email": "prof.ada@codementor.edu", "role": "faculty", "password": "faculty123"},
+            {"id": 3, "email": "ta.hopper@codementor.edu", "role": "faculty", "password": "ta123"},
+
+            # Students
+            {"id": 101, "email": "student101@codementor.edu", "role": "student", "password": "student123"},
+            {"id": 102, "email": "student102@codementor.edu", "role": "student", "password": "student123"},
+            {"id": 103, "email": "student103@codementor.edu", "role": "student", "password": "student123"},
+            {"id": 104, "email": "student104@codementor.edu", "role": "student", "password": "student123"},
+            {"id": 105, "email": "student105@codementor.edu", "role": "student", "password": "student123"},
+        ]
+
+        for u in users_to_seed:
+            existing = db.query(models.User).filter_by(id=u["id"]).first()
+            if not existing:
+                new_user = models.User(
+                    id=u["id"],
+                    email=u["email"],
+                    hashed_password=u["password"],
+                    role=u["role"]
+                )
+                db.add(new_user)
+
         db.commit()
     except Exception:
         db.rollback()
