@@ -9,4 +9,4 @@ COPY . .
 
 EXPOSE 4174
 
-CMD ["sh", "-c", "npm install && npm run dev -- --host 0.0.0.0 --port 4174"]
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "4174"]

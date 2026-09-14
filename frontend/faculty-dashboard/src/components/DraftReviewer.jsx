@@ -6,16 +6,26 @@ export default function DraftReviewer({
   onApprove,
   onDelete,
   onUpdateDraftTests,
+  onUpdateDraftViva,
   isLoading
 }) {
   const [editingTests, setEditingTests] = useState(false)
   const [tests, setTests] = useState([])
+  const [editingViva, setEditingViva] = useState(false)
+  const [vivaList, setVivaList] = useState([])
 
-  // Synchronize draft tests when question changes
+  // Synchronize draft tests and viva when question changes
   React.useEffect(() => {
     if (currentQuestion) {
       setTests(currentQuestion.draft_tests || [])
+      setVivaList(currentQuestion.draft_viva || [])
       setEditingTests(false)
+      setEditingViva(false)
+    } else {
+      setTests([])
+      setVivaList([])
+      setEditingTests(false)
+      setEditingViva(false)
     }
   }, [currentQuestion])
 
@@ -57,6 +67,41 @@ export default function DraftReviewer({
       await onUpdateDraftTests(tests)
     }
     setEditingTests(false)
+  }
+
+  const handleVivaChange = (index, field, value) => {
+    setVivaList(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }
+
+  const handleAddVivaQuestion = () => {
+    setVivaList(prev => [
+      ...prev,
+      { prompt: '', expected_concepts: [], sample_answer: '' }
+    ])
+    setEditingViva(true)
+  }
+
+  const handleRemoveVivaQuestion = (index) => {
+    setVivaList(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSaveViva = async () => {
+    if (onUpdateDraftViva) {
+      const cleaned = vivaList.map(v => ({
+        ...v,
+        expected_concepts: Array.isArray(v.expected_concepts)
+          ? v.expected_concepts.filter(Boolean)
+          : typeof v.expected_concepts === 'string'
+          ? v.expected_concepts.split(',').map(s => s.trim()).filter(Boolean)
+          : []
+      }))
+      await onUpdateDraftViva(cleaned)
+    }
+    setEditingViva(false)
   }
 
   return (
@@ -218,16 +263,146 @@ export default function DraftReviewer({
 
       {/* SECTION 2: DRAFT VIVA QUESTION BANK */}
       <div style={{ marginBottom: 24 }}>
-        <h4 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--accent-purple)', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Mic size={16} /> Draft Viva Question Bank ({currentQuestion.draft_viva?.length || 0} questions)
-        </h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {currentQuestion.draft_viva?.map((v, idx) => (
-            <div key={idx} style={{ background: 'var(--bg-input)', padding: 12, borderRadius: 8, fontSize: '0.82rem', border: '1px solid var(--border-color)' }}>
-              <div><strong>Q{idx + 1}:</strong> {v.prompt}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.76rem', marginTop: 4 }}>
-                Target Concepts: {v.expected_concepts?.join(', ')}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <h4 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--accent-purple)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Mic size={16} /> Draft Viva Question Bank ({vivaList.length} questions)
+          </h4>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            {editingViva ? (
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={handleSaveViva}
+                style={{ fontSize: '0.76rem', padding: '4px 10px', color: 'var(--accent-emerald)', borderColor: 'rgba(52, 211, 153, 0.4)' }}
+              >
+                <Save size={13} /> Save Viva Edits
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="btn-outline"
+                onClick={() => setEditingViva(true)}
+                style={{ fontSize: '0.76rem', padding: '4px 10px' }}
+              >
+                <Edit2 size={13} /> Edit Viva Questions
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn-outline"
+              onClick={handleAddVivaQuestion}
+              style={{ fontSize: '0.76rem', padding: '4px 10px', color: 'var(--accent-purple)', borderColor: 'rgba(192, 132, 252, 0.4)' }}
+            >
+              <Plus size={13} /> Add Question
+            </button>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {vivaList.map((v, idx) => (
+            <div
+              key={idx}
+              style={{
+                background: 'var(--bg-input)',
+                padding: 14,
+                borderRadius: 8,
+                fontSize: '0.82rem',
+                border: '1px solid var(--border-color)'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <strong style={{ color: 'var(--accent-purple)', fontSize: '0.84rem' }}>
+                  Question #{idx + 1}
+                </strong>
+                {editingViva && (
+                  <button
+                    type="button"
+                    className="btn-outline"
+                    onClick={() => handleRemoveVivaQuestion(idx)}
+                    style={{ fontSize: '0.72rem', padding: '2px 6px', color: 'var(--accent-rose)' }}
+                    title="Delete this viva question"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                )}
               </div>
+
+              {editingViva ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                      Oral Viva Question Prompt:
+                    </span>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      value={v.prompt || ''}
+                      onChange={(e) => handleVivaChange(idx, 'prompt', e.target.value)}
+                      placeholder="e.g. Why is a hash map more efficient than nested loops? Explain the time complexity."
+                      style={{ fontSize: '0.82rem', lineHeight: 1.4 }}
+                    />
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                      Target Concepts (comma-separated):
+                    </span>
+                    <input
+                      className="form-input"
+                      value={Array.isArray(v.expected_concepts) ? v.expected_concepts.join(', ') : (v.expected_concepts || '')}
+                      onChange={(e) => handleVivaChange(idx, 'expected_concepts', e.target.value.split(',').map(s => s.trimStart()))}
+                      placeholder="e.g. Time complexity, Hash map lookup, Space trade-off"
+                      style={{ fontSize: '0.82rem' }}
+                    />
+                  </div>
+
+                  <div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                      Benchmark / Sample Answer (optional):
+                    </span>
+                    <textarea
+                      className="form-input"
+                      rows={2}
+                      value={v.sample_answer || ''}
+                      onChange={(e) => handleVivaChange(idx, 'sample_answer', e.target.value)}
+                      placeholder="Expected conceptual answer points..."
+                      style={{ fontSize: '0.8rem', lineHeight: 1.4 }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize: '0.88rem', color: 'var(--text-main)', fontWeight: 600, marginBottom: 6 }}>
+                    {v.prompt || '(Empty question prompt)'}
+                  </div>
+                  {v.expected_concepts && (Array.isArray(v.expected_concepts) ? v.expected_concepts.length > 0 : Boolean(v.expected_concepts)) && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: v.sample_answer ? 8 : 0 }}>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Concepts:</span>
+                      {(Array.isArray(v.expected_concepts) ? v.expected_concepts : String(v.expected_concepts).split(',')).filter(Boolean).map((c, cIdx) => (
+                        <span key={cIdx} className="tag tag-purple" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                          {c.trim ? c.trim() : c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {v.sample_answer && (
+                    <div style={{
+                      marginTop: 6,
+                      padding: '8px 10px',
+                      background: 'var(--bg-card)',
+                      borderRadius: 6,
+                      fontSize: '0.78rem',
+                      color: 'var(--text-muted)',
+                      borderLeft: '2px solid var(--accent-purple)'
+                    }}>
+                      <strong style={{ color: 'var(--text-dim)' }}>Sample Answer: </strong>
+                      {v.sample_answer}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

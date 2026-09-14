@@ -8,7 +8,7 @@ import DraftAssignmentForm from './components/DraftAssignmentForm'
 import DraftReviewer from './components/DraftReviewer'
 import MisconceptionAnalytics from './components/MisconceptionAnalytics'
 import SubmissionsTable from './components/SubmissionsTable'
-import SubmissionInspectorModal from './components/SubmissionInspectorModal'
+const SubmissionInspectorModal = React.lazy(() => import('./components/SubmissionInspectorModal'))
 import ConfirmModal from './components/ConfirmModal'
 import Toast from './components/Toast'
 import { School, User, Lock, Trash2, Code2, ArrowRight } from 'lucide-react'
@@ -74,16 +74,26 @@ function App() {
     }
   }
 
-  const fetchQuestions = async () => {
+  const fetchQuestions = async (targetAssignmentId = null) => {
     try {
       const data = await api.getQuestions()
       setQuestionsList(data)
       if (data.length > 0) {
-        const currentId = assignmentId || String(data[0].id)
-        const matched = data.find(q => String(q.id) === currentId) || data[0]
+        let matched = null
+        if (targetAssignmentId != null) {
+          matched = data.find(q => String(q.id) === String(targetAssignmentId))
+        } else if (assignmentId) {
+          matched = data.find(q => String(q.id) === String(assignmentId))
+        }
+        if (!matched) matched = data[0]
+
         setAssignmentId(String(matched.id))
         setCurrentQuestion(matched)
         fetchIntelligence(matched.id)
+      } else {
+        setAssignmentId('')
+        setCurrentQuestion(null)
+        setFacultyIntelligence(null)
       }
     } catch (e) {
       console.error('Failed to fetch questions', e)
@@ -106,6 +116,12 @@ function App() {
       setCurrentQuestion(found)
     }
     fetchIntelligence(parseInt(qId, 10))
+  }
+
+  const handleStartNewAssignment = () => {
+    setTitle('')
+    setDescription('')
+    setCurrentQuestion(null)
   }
 
   // Dynamic Real-time Sync & Auto-Refresh
@@ -175,12 +191,12 @@ function App() {
     setFacLoading(true)
     try {
       const data = await api.createQuestion({ title, description, language: facLanguage })
-      setCurrentQuestion(data)
       setAssignmentId(String(data.id))
+      setCurrentQuestion(data)
       setTitle('')
       setDescription('')
       addToast('✨ Draft Assignment & AI Test/Viva Bank Created!', 'success')
-      await fetchQuestions()
+      await fetchQuestions(data.id)
       await fetchAnalytics()
       fetchIntelligence(data.id)
     } catch (err) {
@@ -198,7 +214,23 @@ function App() {
       const updated = await api.updateQuestion(currentQuestion.id, { draft_tests: updatedTests })
       setCurrentQuestion(updated)
       addToast('✅ Draft test cases updated successfully.', 'success')
-      await fetchQuestions()
+      await fetchQuestions(currentQuestion.id)
+    } catch (err) {
+      addToast(`Update failed: ${err.message}`, 'error')
+    } finally {
+      setFacLoading(false)
+    }
+  }
+
+  // Update Draft Viva Questions
+  const handleUpdateDraftViva = async (updatedViva) => {
+    if (!currentQuestion) return
+    setFacLoading(true)
+    try {
+      const updated = await api.updateQuestion(currentQuestion.id, { draft_viva: updatedViva })
+      setCurrentQuestion(updated)
+      addToast('✅ Draft viva questions updated successfully.', 'success')
+      await fetchQuestions(currentQuestion.id)
     } catch (err) {
       addToast(`Update failed: ${err.message}`, 'error')
     } finally {
@@ -214,7 +246,7 @@ function App() {
       const updated = await api.approveQuestion(currentQuestion.id)
       setCurrentQuestion(updated)
       addToast('✅ Assignment Approved! Students can now submit solutions.', 'success')
-      await fetchQuestions()
+      await fetchQuestions(currentQuestion.id)
       await fetchAnalytics()
     } catch (err) {
       addToast(`Approval failed: ${err.message}`, 'error')
@@ -458,6 +490,8 @@ function App() {
             onSelectAssignment={handleSelectAssignment}
             onCreateQuestion={handleCreateQuestion}
             onUpdateDraftTests={handleUpdateDraftTests}
+            onUpdateDraftViva={handleUpdateDraftViva}
+            onStartNewAssignment={handleStartNewAssignment}
             onApprove={handleApprove}
             onDelete={handleDeleteQuestion}
             onNavigateToSubmissions={(qId) => {
@@ -592,14 +626,18 @@ function App() {
           </div>
         )}
 
-        {/* Submission Inspector Modal */}
-        <SubmissionInspectorModal
-          submission={inspectSubmission}
-          isOpen={!!inspectSubmission}
-          onClose={() => setInspectSubmission(null)}
-          onSaveOverride={handleSaveOverride}
-          theme={theme === 'light' ? 'light' : 'vs-dark'}
-        />
+        {/* Submission Inspector Modal (Lazy loaded on demand to prevent loading Monaco on initial render) */}
+        {inspectSubmission && (
+          <React.Suspense fallback={null}>
+            <SubmissionInspectorModal
+              submission={inspectSubmission}
+              isOpen={!!inspectSubmission}
+              onClose={() => setInspectSubmission(null)}
+              onSaveOverride={handleSaveOverride}
+              theme={theme === 'light' ? 'light' : 'vs-dark'}
+            />
+          </React.Suspense>
+        )}
 
         {/* Reusable Confirmation Modal */}
         <ConfirmModal

@@ -44,23 +44,39 @@ npm install
 npm run dev
 ```
 
-### 4. Run Every Component as Containers (Single Command)
+### 4. Fast Native Runner (No Docker Required - Starts in ~1-2s)
 
-Run every part of this project (PostgreSQL + FastAPI Backend + Docker Sandbox + Student Portal + Faculty Dashboard) using a single command:
+Run all services natively with SQLite and Vite concurrently in a single terminal:
 
 **On Windows (PowerShell):**
 ```powershell
-.\run.ps1
+.\run-local.ps1
 ```
 
 **On Linux / Mac / Git Bash:**
 ```bash
-./run.sh
+./run-local.sh
 ```
 
-**Direct Docker Compose Command (Any Platform):**
+### 5. Multi-Container Runner (Docker Mode - Starts in ~3-5s)
+
+Run all components as isolated Docker containers:
+
+**On Windows (PowerShell):**
+```powershell
+.\run.ps1           # Fast start using existing images (~3-5s)
+.\run.ps1 -Build    # Rebuild images when dependencies change
+```
+
+**On Linux / Mac / Git Bash:**
 ```bash
-docker compose up --build
+./run.sh            # Fast start using existing images (~3-5s)
+./run.sh --build    # Rebuild images when dependencies change
+```
+
+**Direct Docker Compose Command:**
+```bash
+docker compose up
 ```
 
 **Exposed Endpoints:**
@@ -69,7 +85,7 @@ docker compose up --build
 - **Faculty Dashboard**: `http://localhost:4174`
 - **PostgreSQL Database**: `localhost:5432`
 
-### 5. Run the Test Suite (95/95 Passed)
+### 6. Run the Test Suite (95/95 Passed)
 
 ```bash
 python -m pytest

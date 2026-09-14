@@ -10,6 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /sandbox
-COPY backend/sandbox /sandbox
+COPY . /sandbox
 
 CMD ["python", "-c", "print('sandbox ready')"]

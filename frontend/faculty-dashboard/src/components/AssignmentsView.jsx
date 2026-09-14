@@ -9,6 +9,8 @@ export default function AssignmentsView({
   onSelectAssignment,
   onCreateQuestion,
   onUpdateDraftTests,
+  onUpdateDraftViva,
+  onStartNewAssignment,
   onApprove,
   onDelete,
   onNavigateToSubmissions,
@@ -54,7 +56,12 @@ export default function AssignmentsView({
         <button
           type="button"
           className="btn-primary"
-          onClick={() => setIsAuthoringOpen(!isAuthoringOpen)}
+          onClick={() => {
+            if (!isAuthoringOpen && onStartNewAssignment) {
+              onStartNewAssignment()
+            }
+            setIsAuthoringOpen(!isAuthoringOpen)
+          }}
         >
           {isAuthoringOpen ? (
             <span>Close Authoring Studio</span>
@@ -103,6 +110,7 @@ export default function AssignmentsView({
                 }}
                 onDelete={onDelete}
                 onUpdateDraftTests={onUpdateDraftTests}
+                onUpdateDraftViva={onUpdateDraftViva}
                 isLoading={isLoading}
               />
             </div>
@@ -269,7 +277,21 @@ export default function AssignmentsView({
                   flexWrap: 'wrap',
                   gap: 8
                 }}>
-                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ fontSize: '0.8rem', padding: '5px 10px', color: 'var(--accent-purple)', borderColor: 'rgba(192, 132, 252, 0.4)' }}
+                      onClick={() => {
+                        onSelectAssignment(q.id)
+                        setIsAuthoringOpen(true)
+                      }}
+                      title="Inspect & edit test cases or viva question bank"
+                    >
+                      <Edit3 size={13} />
+                      <span>{q.is_approved ? 'Edit Tests & Viva' : 'Review Draft'}</span>
+                    </button>
+
                     <button
                       type="button"
                       className="btn-outline"

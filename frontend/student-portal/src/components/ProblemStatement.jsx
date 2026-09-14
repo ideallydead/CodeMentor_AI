@@ -15,7 +15,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import AssessmentFeedbackView from './AssessmentFeedbackView'
-import OptimizationView from './OptimizationView'
+const OptimizationView = React.lazy(() => import('./OptimizationView'))
 import VivaSimulator from './VivaSimulator'
 
 export default function ProblemStatement({
@@ -467,13 +467,15 @@ export default function ProblemStatement({
           )}
 
           {reportSubTab === 'optimization' && (
-            <OptimizationView
-              optDetails={optDetails}
-              optSummary={optOutput?.summary}
-              originalCode={sourceCode}
-              language={language}
-              theme={theme}
-            />
+            <React.Suspense fallback={<div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>Loading code comparison...</div>}>
+              <OptimizationView
+                optDetails={optDetails}
+                optSummary={optOutput?.summary}
+                originalCode={sourceCode}
+                language={language}
+                theme={theme}
+              />
+            </React.Suspense>
           )}
 
           {reportSubTab === 'viva' && (

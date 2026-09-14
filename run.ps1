@@ -1,3 +1,10 @@
+[CmdletBinding()]
+param(
+    [switch]$Build,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$ExtraArgs
+)
+
 # CodeMentor AI - Container Launcher Script for Windows PowerShell
 # Runs all components (PostgreSQL, Backend API, Sandbox Execution Engine, Student Portal, Faculty Dashboard) in Docker.
 
@@ -102,11 +109,21 @@ if (Get-Command "docker" -ErrorAction SilentlyContinue) {
     Write-Host "       - Sandbox Container:   Isolated execution engine"
     Write-Host "============================================================" -ForegroundColor Cyan
     
-    if ($args.Count -gt 0) {
-        docker compose up --build @args
+    $composeArgs = @()
+    if ($Build -or ($ExtraArgs -and ($ExtraArgs -contains "--build"))) {
+        $composeArgs += "--build"
     } else {
-        docker compose up --build
+        Write-Host "[TIP] Starting in fast mode. To force container rebuild: .\run.ps1 -Build" -ForegroundColor DarkGray
     }
+
+    if ($ExtraArgs) {
+        $filteredExtra = $ExtraArgs | Where-Object { $_ -ne "--build" }
+        if ($filteredExtra) {
+            $composeArgs += $filteredExtra
+        }
+    }
+
+    docker compose up @composeArgs
 } else {
     Write-Host "[ERROR] 'docker' command was not found. Please ensure Docker Desktop for Windows is installed and added to PATH." -ForegroundColor Red
     exit 1

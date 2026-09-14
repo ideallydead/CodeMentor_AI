@@ -10,21 +10,21 @@ class QuestionCreate(BaseModel):
 
 
 class QuestionUpdate(BaseModel):
-    title: Optional[str]
-    description: Optional[str]
-    language: Optional[str]
-    draft_tests: Optional[List[Dict[str, Any]]]
-    draft_viva: Optional[List[Dict[str, Any]]]
+    title: Optional[str] = None
+    description: Optional[str] = None
+    language: Optional[str] = None
+    draft_tests: Optional[List[Dict[str, Any]]] = None
+    draft_viva: Optional[List[Dict[str, Any]]] = None
 
 
 class QuestionResponse(BaseModel):
     id: int
     title: str
-    description: str
+    description: Optional[str] = ""
     language: str
     is_approved: bool
-    draft_tests: List[Dict[str, Any]]
-    draft_viva: List[Dict[str, Any]]
+    draft_tests: Optional[List[Dict[str, Any]]] = []
+    draft_viva: Optional[List[Dict[str, Any]]] = []
 
 
 class SubmissionCreate(BaseModel):

@@ -60,6 +60,29 @@ def update_question(question_id: int, payload: schemas.QuestionUpdate, db: Sessi
     update_data = payload.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(question, field, value)
+
+    # If assignment is approved, keep relational models in sync with edited draft tests and viva
+    if question.is_approved:
+        if 'draft_tests' in update_data:
+            db.query(models.TestCase).filter(models.TestCase.assignment_id == question.id).delete()
+            for dt in (question.draft_tests or []):
+                tc_model = models.TestCase(
+                    assignment_id=question.id,
+                    input_data=dt.get('input', dt.get('input_data', '')),
+                    expected_output=dt.get('expected_output', ''),
+                    active=True
+                )
+                db.add(tc_model)
+        if 'draft_viva' in update_data:
+            db.query(models.VivaQuestion).filter(models.VivaQuestion.assignment_id == question.id).delete()
+            for dv in (question.draft_viva or []):
+                vq_model = models.VivaQuestion(
+                    assignment_id=question.id,
+                    prompt=dv.get('prompt', ''),
+                    expected_concepts=dv.get('expected_concepts', [])
+                )
+                db.add(vq_model)
+
     db.add(question)
     db.commit()
     db.refresh(question)
@@ -73,9 +96,9 @@ def approve_question(question_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail='Question not found')
     question.is_approved = True
 
-    # Persist draft test cases into TestCase DB models if not already created
-    existing_tcs = db.query(models.TestCase).filter(models.TestCase.assignment_id == question.id).count()
-    if existing_tcs == 0 and question.draft_tests:
+    # Persist draft test cases into TestCase DB models (cleanly replacing to reflect any faculty edits)
+    db.query(models.TestCase).filter(models.TestCase.assignment_id == question.id).delete()
+    if question.draft_tests:
         for dt in question.draft_tests:
             tc_model = models.TestCase(
                 assignment_id=question.id,
@@ -85,9 +108,9 @@ def approve_question(question_id: int, db: Session = Depends(get_db)):
             )
             db.add(tc_model)
 
-    # Persist draft viva into VivaQuestion DB models if not already created
-    existing_vqs = db.query(models.VivaQuestion).filter(models.VivaQuestion.assignment_id == question.id).count()
-    if existing_vqs == 0 and question.draft_viva:
+    # Persist draft viva into VivaQuestion DB models (cleanly replacing to reflect any faculty edits)
+    db.query(models.VivaQuestion).filter(models.VivaQuestion.assignment_id == question.id).delete()
+    if question.draft_viva:
         for dv in question.draft_viva:
             vq_model = models.VivaQuestion(
                 assignment_id=question.id,

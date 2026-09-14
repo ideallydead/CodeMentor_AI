@@ -45,4 +45,19 @@ echo "       - Faculty Dashboard:   http://localhost:4174"
 echo "       - Sandbox Container:   Isolated execution engine"
 echo "============================================================"
 
-$DOCKER_COMPOSE_CMD up --build "$@"
+BUILD_FLAG=""
+ARGS=()
+
+for arg in "$@"; do
+    if [ "$arg" = "--build" ] || [ "$arg" = "-b" ]; then
+        BUILD_FLAG="--build"
+    else
+        ARGS+=("$arg")
+    fi
+done
+
+if [ -z "$BUILD_FLAG" ]; then
+    echo "[TIP] Starting in fast mode. To force container rebuild: ./run.sh --build"
+fi
+
+$DOCKER_COMPOSE_CMD up $BUILD_FLAG "${ARGS[@]}"

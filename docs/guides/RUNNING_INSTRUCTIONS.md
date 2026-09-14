@@ -101,25 +101,42 @@ npm run dev
 ```
 - **Faculty Dashboard URL**: [http://localhost:5174](http://localhost:5174) (or port output by Vite)
 
----
+### Fast Singular Command (No Docker Required - Starts in ~1-2s)
 
-## 🐳 Running with Docker Containers (Singular Command)
-
-To run the entire multi-container environment (PostgreSQL + FastAPI Backend + Docker Sandbox + Student Portal + Faculty Dashboard) in **one single command**:
+Run all three services (Backend + Student Portal + Faculty Dashboard) simultaneously in a single terminal:
 
 **On Windows (PowerShell):**
 ```powershell
-.\run.ps1
+.\run-local.ps1
 ```
 
 **On Linux / Mac / Git Bash:**
 ```bash
-./run.sh
+./run-local.sh
+```
+
+---
+
+## 🐳 Running with Docker Containers
+
+To run the multi-container environment (PostgreSQL + FastAPI Backend + Docker Sandbox + Student Portal + Faculty Dashboard):
+
+**On Windows (PowerShell):**
+```powershell
+.\run.ps1           # Fast start using existing images (~3-5s)
+.\run.ps1 -Build    # Rebuild container images when dependencies change
+```
+
+**On Linux / Mac / Git Bash:**
+```bash
+./run.sh            # Fast start using existing images (~3-5s)
+./run.sh --build    # Rebuild container images when dependencies change
 ```
 
 **Direct Docker Compose (Cross-Platform):**
 ```bash
-docker compose up --build
+docker compose up          # Fast start
+docker compose up --build  # Rebuild images
 ```
 
 **Services Exposed:**
