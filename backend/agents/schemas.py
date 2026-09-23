@@ -117,6 +117,7 @@ class MentorReport(BaseModel):
     hints: List[MentorHint] = Field(default_factory=list, description="Targeted Socratic hints for failures (empty if perfect submission)")
     suggested_reading: List[str] = Field(default_factory=list, description="Recommended topics/resources to review")
     concepts_detected: List[DetectedConcept] = Field(default_factory=list, description="Core programming concepts detected in AST")
+    learning_objectives: List[str] = Field(default_factory=list, description="Key conceptual learning objectives")
 
     class Config:
         json_schema_extra = {
@@ -135,7 +136,8 @@ class MentorReport(BaseModel):
                         "concept_name": "list_comprehension",
                         "ast_evidence": "ListComp node at line 4"
                     }
-                ]
+                ],
+                "learning_objectives": ["Understand loop invariants", "Avoid redundant state transitions"]
             }
         }
 
@@ -159,6 +161,7 @@ class OptimizationReport(BaseModel):
     estimated_space_complexity: str = Field(..., description="Estimated Big-O space complexity (e.g. 'O(1)')")
     findings: List[OptimizationFinding] = Field(default_factory=list, description="Performance findings and bottlenecks")
     overall_summary: str = Field(..., description="High-level evaluation of algorithmic efficiency")
+    suggested_code: Optional[str] = Field(None, description="Suggested refactored code for Monaco DiffEditor")
 
 
 # =============================================================================

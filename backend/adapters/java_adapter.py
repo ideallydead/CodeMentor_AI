@@ -84,6 +84,13 @@ def parse_source(source: str) -> ParsedSubmission:
         vocab = max(2, len(operators) + len(operands))
         length = max(5, total_ops + len(nodes) // 3)
         halstead_volume = round(length * math.log2(vocab), 2)
+        
+        # Halstead difficulty = (n1/2) * (N2/n2)
+        n1 = max(1, len(operators))
+        n2 = max(1, len(operands))
+        N2 = max(1, total_ops)
+        halstead_difficulty = round((n1 / 2.0) * (N2 / float(n2)), 2)
+        halstead_effort = round(halstead_difficulty * halstead_volume, 2)
 
         # Maintainability Index estimation formula
         raw_mi = 100.0 - (cyclomatic_cc * 3.5) - (math.log(max(loc, 1)) * 6.0)
@@ -99,6 +106,31 @@ def parse_source(source: str) -> ParsedSubmission:
             rank = 'D'
         else:
             rank = 'F'
+
+        # Java static code smell checks
+        for path, node in tree.filter(javalang.tree.CatchClause):
+            if hasattr(node, 'block') and (not node.block or len(node.block) == 0):
+                diagnostics.append(Diagnostic(
+                    path='<submission>',
+                    line=getattr(node.position, 'line', 0) if hasattr(node, 'position') and node.position else 0,
+                    column=getattr(node.position, 'column', None) if hasattr(node, 'position') and node.position else None,
+                    message="Empty catch block detected; swallowing exceptions prevents error diagnosis and hides runtime faults",
+                    severity='warning',
+                    code='empty-catch-block'
+                ))
+
+        # Check for deep nesting
+        for path, node in tree.filter(javalang.tree.ForStatement):
+            nesting_depth = sum(1 for p in path if isinstance(p, (javalang.tree.ForStatement, javalang.tree.WhileStatement, javalang.tree.DoStatement)))
+            if nesting_depth >= 3:
+                diagnostics.append(Diagnostic(
+                    path='<submission>',
+                    line=getattr(node.position, 'line', 0) if hasattr(node, 'position') and node.position else 0,
+                    column=getattr(node.position, 'column', None) if hasattr(node, 'position') and node.position else None,
+                    message=f"Deeply nested loop structure ({nesting_depth + 1} levels) creates potential O(n^{nesting_depth + 1}) bottleneck; consider restructuring with hash structures",
+                    severity='warning',
+                    code='deep-loop-nesting'
+                ))
 
     except (javalang.parser.JavaSyntaxError, TypeError, javalang.tokenizer.LexerError) as exc:
         line_num = 0
@@ -120,6 +152,8 @@ def parse_source(source: str) -> ParsedSubmission:
         maintainability_index=maintainability_idx,
         loc=loc,
         halstead_volume=halstead_volume,
+        difficulty=halstead_difficulty if 'halstead_difficulty' in locals() else None,
+        effort=halstead_effort if 'halstead_effort' in locals() else None,
         rank=rank,
     )
 
@@ -130,6 +164,6 @@ def parse_source(source: str) -> ParsedSubmission:
         ast_summary=ast_summary,
         complexity=complexity,
         diagnostics=diagnostics,
-        static_findings=[],
+        static_findings=[d for d in diagnostics if d.severity != 'error'],
         metadata={}
     )

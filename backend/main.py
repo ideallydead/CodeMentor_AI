@@ -27,8 +27,15 @@ if os.path.exists(os.path.join(STUDENT_DIST, "assets")):
     app.mount("/assets", StaticFiles(directory=os.path.join(STUDENT_DIST, "assets")), name="assets")
 
 
+import asyncio
+from backend.api.ws import manager
+
 @app.on_event('startup')
 async def startup_event():
+    try:
+        manager.set_loop(asyncio.get_running_loop())
+    except Exception:
+        pass
     init_db(settings.database_url)
 
 

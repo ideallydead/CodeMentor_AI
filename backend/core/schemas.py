@@ -12,11 +12,13 @@ class Diagnostic(BaseModel):
 
 
 class ComplexityMetrics(BaseModel):
-    cyclomatic_complexity: Optional[float]
-    maintainability_index: Optional[float]
-    loc: Optional[int]
-    halstead_volume: Optional[float]
-    rank: Optional[str]
+    cyclomatic_complexity: Optional[float] = None
+    maintainability_index: Optional[float] = None
+    loc: Optional[int] = None
+    halstead_volume: Optional[float] = None
+    difficulty: Optional[float] = None
+    effort: Optional[float] = None
+    rank: Optional[str] = None
 
 
 class ASTSummary(BaseModel):
@@ -25,7 +27,7 @@ class ASTSummary(BaseModel):
     function_count: int
     class_count: int
     imports: List[str]
-    summary: Optional[str]
+    summary: Optional[str] = None
     metadata: Dict[str, Any] = {}
 
 
@@ -35,8 +37,9 @@ class ParsedSubmission(BaseModel):
     source: str
     ast_summary: ASTSummary
     complexity: ComplexityMetrics
-    diagnostics: List[Diagnostic]
-    static_findings: List[Diagnostic]
+    diagnostics: List[Diagnostic] = []
+    static_findings: List[Diagnostic] = []
+    assignment_context: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = {}
 
 

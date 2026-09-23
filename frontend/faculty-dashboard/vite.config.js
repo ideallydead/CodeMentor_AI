@@ -5,6 +5,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 4174,
+    watch: {
+      usePolling: true,
+    },
   },
   optimizeDeps: {
     include: ['react', 'react-dom', '@monaco-editor/react', 'lucide-react'],

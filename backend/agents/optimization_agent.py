@@ -11,7 +11,7 @@ OUTPUT:
 
 import re
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from backend.core.schemas import ParsedSubmission, AgentOutput
 from backend.core.llm_client import LLMClient, get_agent_llm_client
@@ -111,7 +111,7 @@ class OptimizationEngine:
 
 
 class OptimizationJustificationGenerator:
-    """Generates narrative performance optimization summary using LLMClient with fallback."""
+    """Generates deep algorithmic performance analysis and suggested refactored code using LLMClient."""
 
     def __init__(self, llm_client: Optional[LLMClient] = None):
         self.llm_client = llm_client or LLMClient()
@@ -119,48 +119,103 @@ class OptimizationJustificationGenerator:
     def generate(
         self,
         language: str,
+        source: str,
         time_comp: str,
         space_comp: str,
-        findings: List[OptimizationFinding]
-    ) -> str:
-        """Generate high-level performance summary text."""
-        findings_summary = "\n".join(f"- {f.issue_type}: {f.description}" for f in findings) if findings else "No critical bottlenecks."
-        prompt = f"""You are a performance optimization engineer.
-Analyze the following code performance profile:
-Language: {language}
+        findings: List[OptimizationFinding],
+        complexity: Optional[Any] = None,
+        assignment_context: Optional[Dict[str, Any]] = None
+    ) -> Tuple[str, Optional[str]]:
+        """
+        Generate in-depth performance analysis and optional refactored code snippet for DiffEditor.
+        Returns: (overall_summary, suggested_code)
+        """
+        assignment_info = ""
+        if assignment_context:
+            title = assignment_context.get("title", "")
+            desc = assignment_context.get("description", "")
+            assignment_info = f"Problem: {title}\nProblem Description: {desc}\n"
+
+        cc_val = getattr(complexity, "cyclomatic_complexity", None)
+        mi_val = getattr(complexity, "maintainability_index", None)
+        h_vol = getattr(complexity, "halstead_volume", None)
+
+        findings_summary = "\n".join(f"- Line {f.line_number} [{f.issue_type}]: {f.description} -> {f.suggested_optimization}" for f in findings) if findings else "No severe loop bottlenecks detected."
+
+        prompt = f"""You are a Principal Software Performance & Algorithmic Optimization Engineer.
+Analyze the following student submission and performance profile:
+
+{assignment_info}Language: {language}
 Estimated Time Complexity: {time_comp}
 Estimated Space Complexity: {space_comp}
+Static Metrics: Cyclomatic Complexity={cc_val or 'N/A'}, Maintainability Index={mi_val or 'N/A'}, Halstead Volume={h_vol or 'N/A'}
 
-Findings:
+Static Bottlenecks Detected:
 {findings_summary}
 
-Write a 2-3 sentence performance summary offering high-level optimization guidance.
-Do NOT output full code solutions."""
+Student Source Code:
+```{language}
+{source}
+```
+
+Provide an in-depth algorithmic efficiency evaluation.
+Respond in JSON format with the following keys:
+- "summary": A detailed, multi-paragraph performance evaluation breaking down:
+  1. Mathematical Big-O Time Complexity derivation and why the current construct scales as {time_comp}.
+  2. Memory & Space Complexity analysis explaining auxiliary allocations and container scaling ({space_comp}).
+  3. Concrete line-by-line bottleneck diagnostics and cache/locality considerations.
+  4. Algorithmic paradigm alternatives (e.g. hash maps, two pointers, binary search, prefix sums) that can reduce runtime.
+- "suggested_code": An optimized, production-grade refactored implementation in {language} resolving the bottlenecks and improving time or space complexity. Must be valid, runnable code without placeholders."""
+
+        system_prompt = "You are a code optimization expert. Analyze computational complexity and generate optimal refactorings in JSON format."
 
         try:
-            result = self.llm_client.generate(prompt, context={"time_complexity": time_comp})
-            text = result.get("response", "") if isinstance(result, dict) else str(result)
-            if text and "TODO: LLM integration pending" not in text and "Fallback response after API exception" not in text:
-                return text
+            result = self.llm_client.generate(prompt, system_prompt=system_prompt, json_mode=True)
+            if isinstance(result, dict) and not result.get("is_fallback"):
+                parsed = result.get("parsed")
+                if isinstance(parsed, dict):
+                    summary = parsed.get("summary", "")
+                    code = parsed.get("suggested_code") or parsed.get("optimized_code")
+                    if summary:
+                        return summary, code
+
+                raw_resp = result.get("response", "")
+                if raw_resp and "Fallback response" not in raw_resp:
+                    return raw_resp, None
         except Exception as exc:
             logger.error(f"LLM optimization summary generation failed: {exc}")
 
-        # Deterministic fallback text
+        # High-quality structured deterministic fallback
         if findings:
-            return (
-                f"The submission has an estimated time complexity of {time_comp} and space complexity of {space_comp}. "
-                f"Identified {len(findings)} potential performance bottleneck(s) that can be optimized by using efficient data structures and reducing nested iterations."
+            fallback_summary = (
+                f"### Algorithmic Complexity Profile\n"
+                f"• **Time Complexity**: **{time_comp}** — Driven by iterative loop structures and element traversal patterns.\n"
+                f"• **Space Complexity**: **{space_comp}** — Reflects internal memory allocations and auxiliary container footprint.\n\n"
+                f"### Performance Bottleneck Analysis\n"
+                f"Static analysis detected {len(findings)} algorithmic bottleneck(s). Nested loops and iterative searches scale quadratically on large inputs ($N \\ge 10^5$). "
+                f"Replacing sequential searches with $O(1)$ amortized Hash Map / Set lookups or sorting with a two-pointer approach will substantially reduce latency.\n\n"
+                f"### Optimization Roadmap\n"
+                f"1. Decouple nested iterations by caching observed elements.\n"
+                f"2. Minimize intermediate memory reallocations inside loop scopes.\n"
+                f"3. Maintain code maintainability while reducing branch mispredictions."
             )
         else:
-            return (
-                f"The submission demonstrates efficient algorithmic performance with estimated time complexity of {time_comp} "
-                f"and space complexity of {space_comp}. No major performance bottlenecks detected."
+            fallback_summary = (
+                f"### Algorithmic Complexity Profile\n"
+                f"• **Time Complexity**: **{time_comp}** — Optimal linear or constant-time bounds observed.\n"
+                f"• **Space Complexity**: **{space_comp}** — Minimal auxiliary memory overhead.\n\n"
+                f"### Performance Appraisal\n"
+                f"The implementation demonstrates strong algorithmic efficiency with no redundant nested loops or unbounded allocations. "
+                f"Memory usage remains tightly bounded, making this solution scalable for large institutional input sets."
             )
+
+        return fallback_summary, None
 
 
 def optimization_agent(
     parsed_submission: ParsedSubmission,
-    llm_client: Optional[LLMClient] = None
+    llm_client: Optional[LLMClient] = None,
+    assignment_context: Optional[Dict[str, Any]] = None
 ) -> AgentOutput:
     """
     Main entry point for Optimization Agent.
@@ -168,6 +223,7 @@ def optimization_agent(
     Args:
         parsed_submission: ParsedSubmission containing source and metrics
         llm_client: Optional LLMClient wrapper instance
+        assignment_context: Optional problem specification
         
     Returns:
         AgentOutput wrapping OptimizationReport
@@ -180,24 +236,29 @@ def optimization_agent(
     space_comp = engine.estimate_space_complexity(parsed_submission.source, parsed_submission.language)
     findings = engine.detect_findings(parsed_submission)
 
+    ctx = assignment_context or getattr(parsed_submission, 'assignment_context', None)
     generator = OptimizationJustificationGenerator(llm_client)
-    overall_summary = generator.generate(
+    overall_summary, suggested_code = generator.generate(
         language=parsed_submission.language,
+        source=parsed_submission.source,
         time_comp=time_comp,
         space_comp=space_comp,
-        findings=findings
+        findings=findings,
+        complexity=parsed_submission.complexity,
+        assignment_context=ctx
     )
 
     report = OptimizationReport(
         estimated_time_complexity=time_comp,
         estimated_space_complexity=space_comp,
         findings=findings,
-        overall_summary=overall_summary
+        overall_summary=overall_summary,
+        suggested_code=suggested_code
     )
 
     recommendations = [f"Line {f.line_number}: {f.suggested_optimization}" if f.line_number > 0 else f.suggested_optimization for f in findings]
     if not recommendations:
-        recommendations = [f"Maintain O({time_comp}) execution efficiency and O({space_comp}) space allocation."]
+        recommendations = [f"Maintain optimal {time_comp} execution efficiency and {space_comp} space allocation."]
 
     details_dict = report.model_dump() if hasattr(report, "model_dump") else report.dict()
 

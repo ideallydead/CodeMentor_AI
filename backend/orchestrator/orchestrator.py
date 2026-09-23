@@ -39,7 +39,8 @@ async def run_assessment_pipeline(
     sandbox_results: Optional[SandboxResults] = None,
     approved_viva_bank: Optional[List[Dict[str, Any]]] = None,
     historical_submissions: Optional[List[Dict[str, Any]]] = None,
-    student_viva_answers: Optional[List[Dict[str, Any]]] = None
+    student_viva_answers: Optional[List[Dict[str, Any]]] = None,
+    assignment_context: Optional[Dict[str, Any]] = None
 ) -> List[AgentOutput]:
     """
     Execute submission-time agents. Assessment Agent runs first to produce scores,
@@ -51,10 +52,14 @@ async def run_assessment_pipeline(
         approved_viva_bank: Approved list of viva questions for the assignment
         historical_submissions: Prior submissions for structural integrity comparison
         student_viva_answers: Optional verbal/written answers submitted by student
+        assignment_context: Problem title, description, constraints
     
     Returns:
         List of AgentOutput from each agent in the pipeline
     """
+    if assignment_context and not getattr(parsed_submission, "assignment_context", None):
+        parsed_submission.assignment_context = assignment_context
+
     if sandbox_results is None:
         sandbox_results = SandboxResults(
             submission_id=parsed_submission.submission_id,
@@ -63,7 +68,13 @@ async def run_assessment_pipeline(
         )
 
     # 1. Run Assessment Agent first to get deterministic scores & issue report
-    assessment_output = await _run_agent_safe("assessment_agent", assessment_agent, parsed_submission, sandbox_results)
+    assessment_output = await _run_agent_safe(
+        "assessment_agent",
+        assessment_agent,
+        parsed_submission,
+        sandbox_results,
+        assignment_context=assignment_context
+    )
 
     assessment_report = None
     if assessment_output.details and assessment_output.details.get("status") != "failed":
@@ -74,10 +85,33 @@ async def run_assessment_pipeline(
 
     # 2. Run Mentor, Optimization, Viva, and Integrity agents concurrently
     other_outputs = await asyncio.gather(
-        _run_agent_safe("mentor_agent", mentor_agent, parsed_submission, assessment_report=assessment_report),
-        _run_agent_safe("optimization_agent", optimization_agent, parsed_submission),
-        _run_agent_safe("viva_agent", viva_agent, parsed_submission, approved_viva_bank=approved_viva_bank, student_viva_answers=student_viva_answers),
-        _run_agent_safe("integrity_agent", integrity_agent, parsed_submission, historical_submissions=historical_submissions),
+        _run_agent_safe(
+            "mentor_agent",
+            mentor_agent,
+            parsed_submission,
+            assessment_report=assessment_report,
+            assignment_context=assignment_context
+        ),
+        _run_agent_safe(
+            "optimization_agent",
+            optimization_agent,
+            parsed_submission,
+            assignment_context=assignment_context
+        ),
+        _run_agent_safe(
+            "viva_agent",
+            viva_agent,
+            parsed_submission,
+            approved_viva_bank=approved_viva_bank,
+            student_viva_answers=student_viva_answers,
+            assignment_context=assignment_context
+        ),
+        _run_agent_safe(
+            "integrity_agent",
+            integrity_agent,
+            parsed_submission,
+            historical_submissions=historical_submissions
+        ),
     )
 
     return [assessment_output] + list(other_outputs)

@@ -184,6 +184,8 @@ def parse_source(source: str) -> ParsedSubmission:
         vocab = max(2, visitor.node_count // 4 + 4)
         length = max(5, visitor.node_count)
         halstead_volume = round(length * math.log2(vocab), 2)
+        halstead_diff = round((visitor.decisions + 2) / 2.0 * (length / max(vocab, 1)), 2)
+        halstead_eff = round(halstead_diff * halstead_volume, 2)
 
         raw_mi = 100.0 - (cyclomatic_cc * 3.5) - (math.log(max(loc, 1)) * 6.0)
         maintainability_idx = round(max(0.0, min(100.0, raw_mi)), 2)
@@ -201,12 +203,15 @@ def parse_source(source: str) -> ParsedSubmission:
 
     # Static analysis findings from cppcheck & static heuristics
     static_findings = _run_cppcheck(source)
+    diagnostics.extend(static_findings)
 
     complexity = ComplexityMetrics(
         cyclomatic_complexity=cyclomatic_cc,
         maintainability_index=maintainability_idx,
         loc=loc,
         halstead_volume=halstead_volume,
+        difficulty=halstead_diff if parsed_ok else None,
+        effort=halstead_eff if parsed_ok else None,
         rank=rank,
     )
 

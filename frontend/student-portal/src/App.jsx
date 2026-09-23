@@ -21,7 +21,9 @@ import {
 } from 'lucide-react'
 
 import api from './services/api'
+import { realtime } from './services/realtime'
 import Navbar from './components/Navbar'
+import PipelineProgressBar from './components/PipelineProgressBar'
 import ProblemStatement from './components/ProblemStatement'
 import TerminalDrawer from './components/TerminalDrawer'
 import ConfirmModal from './components/ConfirmModal'
@@ -147,28 +149,52 @@ function App() {
     return defaultTemplate || STARTER_TEMPLATES[targetLang] || STARTER_TEMPLATES.python
   }
 
-  // Load questions when authenticated
-  const loadQuestions = async (explicitStudentId) => {
+  // Load questions when authenticated or refreshed dynamically
+  const loadQuestions = async (explicitStudentId, options = {}) => {
+    const { preserveEditorState = false } = options
     try {
       const data = await api.getQuestions()
       const list = data || []
       setQuestionsList(list)
       if (list.length > 0) {
-        const current = (assignmentId && list.find(q => String(q.id) === String(assignmentId))) || list[0]
-        setAssignmentId(String(current.id))
-        setSelectedQuestion(current)
-        const targetLang = current.language || 'python'
-        setLanguage(targetLang)
-        const code = await resolveStudentCode(current.id, targetLang, current.starter_code, explicitStudentId)
-        setSourceCode(code)
+        let current = null
+        if (assignmentId) {
+          current = list.find(q => String(q.id) === String(assignmentId))
+        }
+
+        if (current) {
+          // Assignment currently viewed still exists - update question metadata
+          setSelectedQuestion(current)
+          if (!preserveEditorState) {
+            const targetLang = current.language || 'python'
+            setLanguage(targetLang)
+            const code = await resolveStudentCode(current.id, targetLang, current.starter_code, explicitStudentId)
+            setSourceCode(code)
+          }
+        } else if (!assignmentId || !preserveEditorState) {
+          // No assignment was selected, or previous selection was removed
+          const first = list[0]
+          setAssignmentId(String(first.id))
+          setSelectedQuestion(first)
+          const targetLang = first.language || 'python'
+          setLanguage(targetLang)
+          const code = await resolveStudentCode(first.id, targetLang, first.starter_code, explicitStudentId)
+          setSourceCode(code)
+        }
       } else {
         setAssignmentId('')
         setSelectedQuestion(null)
-        setSourceCode(STARTER_TEMPLATES[language] || '')
+        if (!preserveEditorState) {
+          setSourceCode(STARTER_TEMPLATES[language] || '')
+        }
       }
+      return list
     } catch (err) {
       console.error('Failed to load questions:', err)
-      addToast(err.message, 'error')
+      if (!preserveEditorState) {
+        addToast(err.message, 'error')
+      }
+      return []
     }
   }
 
@@ -177,6 +203,55 @@ function App() {
       loadQuestions(currentUser.id)
     }
   }, [isAuthenticated, currentUser?.id])
+
+  // Real-time synchronization subscriber
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const unsubscribe = realtime.subscribe((event) => {
+      const { type, data } = event || {}
+      if (
+        type === 'ASSIGNMENT_CREATED' ||
+        type === 'ASSIGNMENT_APPROVED' ||
+        type === 'ASSIGNMENT_UPDATED' ||
+        type === 'ASSIGNMENT_DELETED' ||
+        type === 'DATA_RESET'
+      ) {
+        const studentIdToUse = currentUser?.id || studentId
+        loadQuestions(studentIdToUse, { preserveEditorState: true }).then((newList) => {
+          if (type === 'ASSIGNMENT_APPROVED' || type === 'ASSIGNMENT_CREATED') {
+            const title = data?.title || 'New Assignment'
+            addToast(`📢 New assignment available: "${title}"`, 'info')
+          } else if (type === 'ASSIGNMENT_UPDATED') {
+            addToast('ℹ️ Assignment test cases/spec updated by faculty.', 'info')
+          } else if (type === 'ASSIGNMENT_DELETED') {
+            addToast('⚠️ An assignment was removed by faculty.', 'warning')
+          } else if (type === 'DATA_RESET') {
+            addToast('🔄 Assignments refreshed.', 'warning')
+          }
+        })
+      }
+    })
+
+    // Resilient fallback: periodic soft poll every 6s when tab is active and visible
+    const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      const studentIdToUse = currentUser?.id || studentId
+      loadQuestions(studentIdToUse, { preserveEditorState: true })
+    }, 6000)
+
+    const handleFocus = () => {
+      const studentIdToUse = currentUser?.id || studentId
+      loadQuestions(studentIdToUse, { preserveEditorState: true })
+    }
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      unsubscribe()
+      clearInterval(pollInterval)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [isAuthenticated, currentUser?.id, studentId, assignmentId])
 
   // Local storage auto-save scoped strictly by student ID
   useEffect(() => {

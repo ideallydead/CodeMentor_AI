@@ -159,7 +159,9 @@ def evaluate_viva_answers(
 def viva_agent(
     parsed_submission: ParsedSubmission,
     approved_viva_bank: Optional[List[Dict[str, Any]]] = None,
-    student_viva_answers: Optional[List[Dict[str, Any]]] = None
+    student_viva_answers: Optional[List[Dict[str, Any]]] = None,
+    llm_client: Optional[LLMClient] = None,
+    assignment_context: Optional[Dict[str, Any]] = None
 ) -> AgentOutput:
     """
     Submission-time agent: Selects and personalizes viva questions from the approved viva bank
@@ -169,35 +171,43 @@ def viva_agent(
         parsed_submission: Pre-computed submission analysis
         approved_viva_bank: Approved list of viva questions for the assignment
         student_viva_answers: Optional student verbal/written answers submitted with code
+        llm_client: Optional LLMClient wrapper instance
+        assignment_context: Optional problem specification
         
     Returns:
         AgentOutput wrapping VivaReport with selected viva questions, evaluated answers, and guidance
     """
+    client = llm_client or get_agent_llm_client("viva_agent")
     bank = approved_viva_bank or []
     
     if not bank:
-        bank = viva_question_agent("Submission Viva", "Default concept review", parsed_submission.language)
+        bank = viva_question_agent("Submission Viva", "Default concept review", parsed_submission.language, llm_client=client)
 
     selected: List[SelectedVivaQuestion] = []
     has_high_cc = bool(parsed_submission.complexity.cyclomatic_complexity and parsed_submission.complexity.cyclomatic_complexity > 5)
     has_multiple_funcs = parsed_submission.ast_summary.function_count > 1
+    ast_metadata = getattr(parsed_submission.ast_summary, "metadata", {}) or {}
+    has_recursion = ast_metadata.get("has_recursion", False)
 
+    # 1. Deterministic base selection from bank
     for idx, q in enumerate(bank, start=1):
         if not isinstance(q, dict):
             continue
         prompt = q.get('prompt', f'Question {idx}')
         concepts = q.get('expected_concepts', [])
         
-        # Tailor prompt to student AST specifics
-        reason = "Matched general algorithmic concepts"
+        reason = "Matched foundational algorithmic design principles"
         if has_high_cc and any('complexity' in c.lower() or 'performance' in c.lower() for c in concepts):
-            reason = f"Selected because student solution has cyclomatic complexity of {parsed_submission.complexity.cyclomatic_complexity}"
-            prompt = f"{prompt} (Specifically regarding your code's cyclomatic complexity)"
+            reason = f"Probes cyclomatic complexity ({parsed_submission.complexity.cyclomatic_complexity}) and branching control flow"
+            prompt = f"{prompt} (Focusing on the branching decisions in your code)"
+        elif has_recursion and any('recursion' in c.lower() or 'stack' in c.lower() or 'base' in c.lower() for c in concepts):
+            reason = "Targeted inquiry regarding recursive base case termination and call-stack limits"
+            prompt = f"{prompt} (Regarding your recursive function call structure)"
         elif has_multiple_funcs and any('algorithm' in c.lower() or 'design' in c.lower() for c in concepts):
-            reason = f"Selected because student solution uses {parsed_submission.ast_summary.function_count} modular functions"
-            prompt = f"{prompt} (Regarding your function decomposition across {parsed_submission.ast_summary.function_count} methods)"
+            reason = f"Probes functional modularity across {parsed_submission.ast_summary.function_count} defined methods"
+            prompt = f"{prompt} (Explaining how your helper functions pass state)"
         elif 'edge' in [c.lower() for c in concepts] or 'boundary' in [c.lower() for c in concepts]:
-            reason = "Selected to test boundary condition and edge case awareness"
+            reason = "Assesses boundary condition testing and edge-case handling awareness"
 
         selected.append(
             SelectedVivaQuestion(
@@ -211,9 +221,18 @@ def viva_agent(
     # Limit to top 3 questions
     selected = selected[:3]
 
+    # 2. Generate enriched faculty oral examination guidance
+    ctx = assignment_context or getattr(parsed_submission, 'assignment_context', None)
+    assignment_title = ctx.get("title", "Assignment") if ctx else "Assignment"
+
     faculty_guidance = (
-        f"Ask the student to answer 2 of the {len(selected)} selected viva questions during oral defense. "
-        "Focus on evaluating whether the student understands their own code structure rather than memorized code."
+        f"### Oral Examination Defense Protocol for '{assignment_title}'\n"
+        f"1. **Core Verification**: Require the student to orally explain their algorithm without reading the code directly. "
+        f"Verify that they can articulate why they chose their specific loop structures and container types.\n"
+        f"2. **Selected Questions**: Pose at least 2 of the {len(selected)} personalized viva questions above. "
+        f"Look for conceptual explanations of time/space complexity rather than memorized syntax.\n"
+        f"3. **Integrity Probe**: Ask the student to walk through state changes on a hypothetical edge input (e.g. empty array or negative numbers) "
+        f"to confirm firsthand authorship."
     )
 
     report = VivaReport(
@@ -231,9 +250,9 @@ def viva_agent(
         avg_viva_score = round(sum(scores) / len(scores)) if scores else None
         details_dict["evaluated_answers"] = evaluated_answers
         details_dict["avg_viva_score"] = avg_viva_score
-        summary = f"Selected {len(selected)} viva questions; evaluated {len(evaluated_answers)} student viva answers (readiness score: {avg_viva_score}%)"
+        summary = f"Selected {len(selected)} personalized viva questions; evaluated {len(evaluated_answers)} student viva answers (readiness score: {avg_viva_score}%)"
     else:
-        summary = f"Selected {len(selected)} personalized viva questions from approved bank"
+        summary = f"Selected {len(selected)} personalized oral defense questions tailored to submission AST metrics"
 
     return AgentOutput(
         agent_name='viva_agent',

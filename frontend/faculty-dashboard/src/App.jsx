@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import api from './services/api'
+import { realtime } from './services/realtime'
 import Navbar from './components/Navbar'
 import WorkspaceTabs from './components/WorkspaceTabs'
 import AssignmentsView from './components/AssignmentsView'
@@ -126,6 +127,38 @@ function App() {
 
   // Dynamic Real-time Sync & Auto-Refresh
   useEffect(() => {
+    if (!isAuthenticated) return
+
+    // 1. WebSocket real-time event subscriber
+    const unsubscribe = realtime.subscribe((event) => {
+      const { type, data } = event || {}
+      if (type === 'SUBMISSION_CREATED' || type === 'SUBMISSION_UPDATED' || type === 'SUBMISSION_DELETED') {
+        fetchAnalytics()
+        const targetQ = data?.assignment_id ? String(data.assignment_id) : assignmentId
+        if (targetQ) {
+          fetchIntelligence(parseInt(targetQ, 10))
+        }
+        if (type === 'SUBMISSION_CREATED') {
+          addToast(`📥 New submission received from Student #${data?.student_id || ''}!`, 'info')
+        }
+      } else if (
+        type === 'ASSIGNMENT_CREATED' ||
+        type === 'ASSIGNMENT_APPROVED' ||
+        type === 'ASSIGNMENT_UPDATED' ||
+        type === 'ASSIGNMENT_DELETED' ||
+        type === 'DATA_RESET'
+      ) {
+        fetchAnalytics()
+        fetchQuestions(assignmentId)
+      } else if (type === 'OVERRIDE_SAVED') {
+        fetchAnalytics()
+        if (assignmentId) {
+          fetchIntelligence(parseInt(assignmentId, 10))
+        }
+      }
+    })
+
+    // 2. BroadcastChannel multi-tab sync fallback
     let channel = null
     try {
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
@@ -146,33 +179,26 @@ function App() {
       console.warn('BroadcastChannel error', e)
     }
 
-    return () => {
-      if (channel) channel.close()
-    }
-  }, [assignmentId])
+    // 3. Fallback interval for background sync
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return
+      fetchAnalytics()
+      if (assignmentId) {
+        fetchIntelligence(parseInt(assignmentId, 10))
+      }
+    }, 5000)
 
-  useEffect(() => {
-    if (!isAuthenticated) return
-
-    const refreshData = () => {
+    const handleFocus = () => {
       fetchAnalytics()
       if (assignmentId) {
         fetchIntelligence(parseInt(assignmentId, 10))
       }
     }
-
-    // Auto-poll interval (4 seconds for real-time analytics updates)
-    const interval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return
-      refreshData()
-    }, 4000)
-
-    const handleFocus = () => {
-      refreshData()
-    }
     window.addEventListener('focus', handleFocus)
 
     return () => {
+      unsubscribe()
+      if (channel) channel.close()
       clearInterval(interval)
       window.removeEventListener('focus', handleFocus)
     }

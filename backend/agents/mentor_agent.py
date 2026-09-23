@@ -213,25 +213,54 @@ class MentorJustificationGenerator:
         correctness_score: int,
         is_perfect: bool,
         hints: List[MentorHint],
-        failed_tests_count: int
+        failed_tests_count: int,
+        concepts_detected: Optional[List[DetectedConcept]] = None,
+        complexity: Optional[ComplexityMetrics] = None,
+        assignment_context: Optional[Dict[str, Any]] = None
     ) -> str:
         """
-        Generate encouraging growth-mindset text.
+        Generate detailed, growth-mindset Socratic feedback.
+        Strict rule: NEVER reveal raw source code solutions.
         """
-        if is_perfect:
-            prompt = f"""You are an encouraging computer science mentor.
-The student submitted a solution in {language} that passed ALL tests with a 100% score!
-Write a concise, 2-3 sentence praise acknowledging their effort and encouraging them to explore next-level conceptual optimizations.
-Do NOT include any source code solutions."""
-        else:
-            hints_summary = "\n".join(f"- {h.topic}: {h.socratic_question}" for h in hints)
-            prompt = f"""You are an encouraging computer science mentor.
-The student submitted a {language} solution that passed {correctness_score}% of tests ({failed_tests_count} failing).
-Write a supportive, encouraging 2-3 sentence feedback acknowledging their progress and guiding them to think about boundary cases.
-Do NOT provide source code solutions.
+        assignment_info = ""
+        if assignment_context:
+            title = assignment_context.get("title", "")
+            desc = assignment_context.get("description", "")
+            assignment_info = f"Problem: {title}\nDescription: {desc}\n"
 
-Focus areas:
-{hints_summary}"""
+        concepts_str = ", ".join(c.concept_name for c in (concepts_detected or [])) or "Basic sequential logic"
+        cc_str = f"Cyclomatic complexity: {getattr(complexity, 'cyclomatic_complexity', 'N/A')}"
+
+        if is_perfect:
+            prompt = f"""You are a distinguished university Computer Science Professor and Socratic Tutor.
+The student submitted a solution in {language} that passed ALL tests with a 100% score!
+
+{assignment_info}Student Profile:
+- Concepts Detected: {concepts_str}
+- Complexity Metrics: {cc_str}
+
+Provide a comprehensive, inspiring growth-mindset pedagogical commentary that:
+1. Praises their algorithmic choices and mastery of structural paradigms ({concepts_str}).
+2. Posits 2 advanced Socratic inquiry questions exploring edge scenarios, scalability under massive datasets (e.g. 10^7 elements), and architectural modularity.
+3. Guides them toward deeper software design principles and language-specific idiomatic optimizations.
+STRICT RULE: Do NOT include copy-paste source code solutions."""
+        else:
+            hints_summary = "\n".join(f"- {h.topic.upper()}: {h.socratic_question} (Review concept: {h.concept_to_review})" for h in hints)
+            prompt = f"""You are a distinguished university Computer Science Professor and Socratic Tutor.
+The student submitted a {language} solution that passed {correctness_score}% of test cases ({failed_tests_count} failing).
+
+{assignment_info}Student Profile:
+- Concepts Detected: {concepts_str}
+- Complexity Profile: {cc_str}
+- Key Failure Themes:
+{hints_summary}
+
+Provide an in-depth, supportive, and pedagogically rich Socratic guidance narrative that:
+1. Warmly acknowledges their effort, highlighting positive structural elements ({concepts_str}) to maintain confidence.
+2. Formulates guided Socratic questions that help the student reason through their logical edge-case misconceptions step-by-step.
+3. Explains how boundary conditions and data constraints relate to the observed behavior.
+4. Outlines a structured learning path with conceptual review topics.
+STRICT RULE: Follow Socratic teaching principles. NEVER provide direct code solutions, syntax fixes, or copy-paste code."""
 
         try:
             result = self.llm_client.generate(prompt, context={"correctness": correctness_score})
@@ -241,23 +270,29 @@ Focus areas:
         except Exception as exc:
             logger.error(f"LLM encouragement generation failed: {exc}")
 
-        # Deterministic fallback text
+        # High-quality structured deterministic fallback
         if is_perfect:
             return (
-                "Excellent work! Your solution passes all test cases cleanly. "
-                "Challenge yourself by analyzing its time and space complexity or exploring alternative algorithmic approaches."
+                f"Excellent work! Outstanding achievement — your {language} solution demonstrates complete correctness across all evaluation test cases and passes cleanly. "
+                f"You have effectively utilized {concepts_str} to construct an efficient algorithmic pipeline.\n\n"
+                f"To deepen your mastery, consider: How does your memory consumption behave as the input scales by several orders of magnitude? "
+                f"Could any intermediate state allocations be replaced by in-place traversals or streaming abstractions?"
             )
         else:
             return (
-                f"Great effort on this submission! You have built a solid foundation ({correctness_score}% tests passing). "
-                "Take a moment to manually trace through edge cases and loop boundaries to refine your solution further."
+                f"Great progress on this implementation! Passing {correctness_score}% of tests confirms that your fundamental approach is sound. "
+                f"You have successfully incorporated {concepts_str} into your program structure.\n\n"
+                f"To resolve the remaining {failed_tests_count} failed test cases, trace your algorithm manually on minimal edge inputs: "
+                f"What occurs when an input sequence is empty, contains duplicate values, or approaches boundary limits? "
+                f"Focus on state invariants between loop iterations to ensure every edge scenario is handled gracefully."
             )
 
 
 def mentor_agent(
     parsed_submission: ParsedSubmission,
     assessment_report: Optional[AssessmentReport] = None,
-    llm_client: Optional[LLMClient] = None
+    llm_client: Optional[LLMClient] = None,
+    assignment_context: Optional[Dict[str, Any]] = None
 ) -> AgentOutput:
     """
     Main entry point for Socratic Mentor Agent.
@@ -266,6 +301,7 @@ def mentor_agent(
         parsed_submission: ParsedSubmission containing AST and complexity data
         assessment_report: Optional AssessmentReport from assessment_agent
         llm_client: Optional LLMClient wrapper instance
+        assignment_context: Optional problem specification
         
     Returns:
         AgentOutput wrapping MentorReport details
@@ -305,21 +341,32 @@ def mentor_agent(
     # 3. Detect AST concepts
     concepts_detected = engine.detect_concepts(parsed_submission)
 
-    # 4. Generate overall encouragement using LLM with fallback
+    # 4. Generate overall encouragement using LLM with fused multi-rubric context
+    ctx = assignment_context or getattr(parsed_submission, 'assignment_context', None)
     generator = MentorJustificationGenerator(llm_client)
     overall_encouragement = generator.generate(
         language=parsed_submission.language,
         correctness_score=correctness_score,
         is_perfect=is_perfect,
         hints=hints,
-        failed_tests_count=len(failed_tests)
+        failed_tests_count=len(failed_tests),
+        concepts_detected=concepts_detected,
+        complexity=parsed_submission.complexity,
+        assignment_context=ctx
     )
+
+    learning_objectives = [
+        f"Mastery of {c.concept_name.replace('_', ' ').title()}" for c in concepts_detected
+    ] + [
+        f"Resolving {h.topic.replace('_', ' ').title()} boundary conditions" for h in hints[:3]
+    ]
 
     report = MentorReport(
         overall_encouragement=overall_encouragement,
         hints=hints,
         suggested_reading=suggested_reading,
-        concepts_detected=concepts_detected
+        concepts_detected=concepts_detected,
+        learning_objectives=learning_objectives
     )
 
     details_dict = report.model_dump() if hasattr(report, "model_dump") else report.dict()

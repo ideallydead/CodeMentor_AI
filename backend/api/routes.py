@@ -11,8 +11,10 @@ from backend.adapters import python_adapter, java_adapter, c_adapter
 from backend.agents.testcase_agent import testcase_agent
 from backend.agents.viva_agent import viva_question_agent, evaluate_viva_answers
 from backend.sandbox.test_suite_runner import run_test_suite_against_code
+from backend.api.ws import ws_router, broadcast_event
 
 router = APIRouter(prefix='/api')
+router.include_router(ws_router)
 
 
 @router.get('/questions', response_model=List[schemas.QuestionResponse])
@@ -48,6 +50,13 @@ def create_question(payload: schemas.QuestionCreate, db: Session = Depends(get_d
     db.add(question)
     db.commit()
     db.refresh(question)
+
+    broadcast_event("ASSIGNMENT_CREATED", {
+        "id": question.id,
+        "title": question.title,
+        "language": question.language,
+        "is_approved": question.is_approved
+    })
 
     return question
 
@@ -86,6 +95,14 @@ def update_question(question_id: int, payload: schemas.QuestionUpdate, db: Sessi
     db.add(question)
     db.commit()
     db.refresh(question)
+
+    broadcast_event("ASSIGNMENT_UPDATED", {
+        "id": question.id,
+        "title": question.title,
+        "language": question.language,
+        "is_approved": question.is_approved
+    })
+
     return question
 
 
@@ -122,6 +139,14 @@ def approve_question(question_id: int, db: Session = Depends(get_db)):
     db.add(question)
     db.commit()
     db.refresh(question)
+
+    broadcast_event("ASSIGNMENT_APPROVED", {
+        "id": question.id,
+        "title": question.title,
+        "language": question.language,
+        "is_approved": question.is_approved
+    })
+
     return question
 
 
@@ -258,12 +283,21 @@ async def submit_code(payload: schemas.SubmissionCreate, db: Session = Depends(g
             for s in prior_subs if s.student_id != payload.student_id
         ]
 
+    assignment_context = {
+        "id": assignment.id,
+        "title": assignment.title,
+        "description": assignment.description or "",
+        "language": payload.language,
+    }
+    parsed.assignment_context = assignment_context
+
     aggregated_report = await run_assessment_pipeline(
         parsed,
         sandbox_results=sandbox_results,
         approved_viva_bank=approved_viva_bank,
         historical_submissions=historical_submissions,
-        student_viva_answers=payload.viva_answers
+        student_viva_answers=payload.viva_answers,
+        assignment_context=assignment_context
     )
 
     if is_resubmission:
@@ -285,6 +319,13 @@ async def submit_code(payload: schemas.SubmissionCreate, db: Session = Depends(g
     db.commit()
     db.refresh(submission)
     db.refresh(report)
+
+    broadcast_event("SUBMISSION_CREATED", {
+        "submission_id": submission.id,
+        "assignment_id": submission.assignment_id,
+        "student_id": submission.student_id,
+        "status": submission.status
+    })
 
     return submission
 
@@ -336,6 +377,14 @@ def update_submission_viva(submission_id: int, payload: schemas.SubmissionVivaUp
     db.add(submission)
     db.commit()
     db.refresh(submission)
+
+    broadcast_event("SUBMISSION_UPDATED", {
+        "submission_id": submission.id,
+        "assignment_id": submission.assignment_id,
+        "student_id": submission.student_id,
+        "viva_score": submission.viva_score
+    })
+
     return submission
 
 
@@ -363,6 +412,15 @@ def override_submission_grade(submission_id: int, payload: schemas.FacultyOverri
     db.add(submission)
     db.commit()
     db.refresh(submission)
+
+    broadcast_event("OVERRIDE_SAVED", {
+        "submission_id": submission.id,
+        "assignment_id": submission.assignment_id,
+        "student_id": submission.student_id,
+        "faculty_score": submission.faculty_score,
+        "final_grade": submission.final_grade
+    })
+
     return submission
 
 
@@ -437,6 +495,10 @@ def delete_question(question_id: int, db: Session = Depends(get_db)):
         except Exception:
             db.rollback()
 
+    broadcast_event("ASSIGNMENT_DELETED", {
+        "id": question_id
+    })
+
     return {'message': f'Assignment #{question_id} and associated records deleted successfully'}
 
 
@@ -448,6 +510,11 @@ def delete_submission(submission_id: int, db: Session = Depends(get_db)):
     db.query(models.Report).filter(models.Report.submission_id == submission_id).delete(synchronize_session=False)
     db.delete(sub)
     db.commit()
+
+    broadcast_event("SUBMISSION_DELETED", {
+        "submission_id": submission_id
+    })
+
     return {'message': f'Submission #{submission_id} and associated report deleted successfully'}
 
 
@@ -482,6 +549,8 @@ def reset_all_data(db: Session = Depends(get_db)):
         db.query(models.TestCase).delete(synchronize_session=False)
         db.query(models.Assignment).delete(synchronize_session=False)
         db.commit()
+
+    broadcast_event("DATA_RESET", {})
 
     return {'message': 'All assignments, test cases, viva questions, submissions, and reports have been reset successfully'}
 
