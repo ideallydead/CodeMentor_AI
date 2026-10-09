@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Mic, CheckCircle2, AlertCircle, Sparkles, Send, Award, Save } from 'lucide-react'
+import { CheckSquare, CheckCircle2, AlertCircle, Sparkles, Send, Award, Save, HelpCircle, FileCheck } from 'lucide-react'
 
 export default function VivaSimulator({
   vivaDetails,
@@ -62,6 +62,7 @@ export default function VivaSimulator({
   }, [vivaDetails])
 
   const currentQ = questions[selectedIdx]
+  const qType = currentQ?.question_type || (currentQ?.options && currentQ.options.length > 0 ? 'mcq' : 'conceptual')
 
   const handleAnswerChange = (text) => {
     setStudentAnswers(prev => ({ ...prev, [selectedIdx]: text }))
@@ -86,15 +87,52 @@ export default function VivaSimulator({
 
   const handleEvaluateAnswer = () => {
     if (!currentQ) return
-    const answer = (studentAnswers[selectedIdx] || '').toLowerCase()
-    const expected = currentQ.expected_concepts || []
+    const studentAns = (studentAnswers[selectedIdx] || '').trim()
 
+    if (qType === 'mcq') {
+      const correctAns = (currentQ.correct_answer || '').trim()
+      const isMatch = studentAns.toLowerCase() === correctAns.toLowerCase() ||
+        (correctAns.length === 1 && studentAns.toUpperCase().startsWith(correctAns.toUpperCase())) ||
+        (studentAns.length > 0 && correctAns.length > 0 && (studentAns.includes(correctAns) || correctAns.includes(studentAns)))
+
+      setEvaluationResults(prev => ({
+        ...prev,
+        [selectedIdx]: {
+          evaluated: true,
+          percentage: isMatch ? 100 : 0,
+          detected: isMatch ? [correctAns] : [],
+          missing: isMatch ? [] : [correctAns]
+        }
+      }))
+      return
+    }
+
+    if (qType === 'fill_in_the_blank') {
+      const correctAns = (currentQ.correct_answer || '').trim().toLowerCase()
+      const cleanStudent = studentAns.toLowerCase().replace(/['"`.]/g, '').trim()
+      const cleanCorrect = correctAns.replace(/['"`.]/g, '').trim()
+      const isMatch = cleanStudent === cleanCorrect || cleanCorrect.split(/[,/|]/).some(part => part.trim() === cleanStudent)
+
+      setEvaluationResults(prev => ({
+        ...prev,
+        [selectedIdx]: {
+          evaluated: true,
+          percentage: isMatch ? 100 : 0,
+          detected: isMatch ? [currentQ.correct_answer] : [],
+          missing: isMatch ? [] : [currentQ.correct_answer]
+        }
+      }))
+      return
+    }
+
+    // Conceptual question
+    const answer = studentAns.toLowerCase()
+    const expected = currentQ.expected_concepts || []
     const detected = []
     const missing = []
 
     expected.forEach(concept => {
       const cleanConcept = concept.toLowerCase().trim()
-      // Check if word or phrase is mentioned
       if (answer.includes(cleanConcept) || cleanConcept.split(' ').some(word => word.length > 3 && answer.includes(word))) {
         detected.push(concept)
       } else {
@@ -118,7 +156,7 @@ export default function VivaSimulator({
   if (questions.length === 0) {
     return (
       <div style={{ padding: 16, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-        No oral defense questions generated for this submission yet.
+        No viva defense questions generated for this submission yet.
       </div>
     )
   }
@@ -136,10 +174,10 @@ export default function VivaSimulator({
         marginBottom: 18
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--accent-amber)', fontWeight: 600, fontSize: '0.92rem', marginBottom: 4 }}>
-          <Mic size={16} /> Interactive Viva Defense Simulator
+          <CheckSquare size={16} /> Interactive Viva Assessment Simulator
         </div>
         <p style={{ fontSize: '0.85rem', color: '#e2e8f0', margin: 0 }}>
-          {vivaDetails?.guidance_for_faculty || 'Practice articulating your algorithmic logic and complexity trade-offs before facing oral examination.'}
+          {vivaDetails?.guidance_for_faculty || 'Practice answering MCQs, fill-in-the-blanks, and articulating your algorithmic logic before instructor verification.'}
         </p>
       </div>
 
@@ -189,9 +227,14 @@ export default function VivaSimulator({
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
             <div>
-              <span className="tag tag-amber" style={{ fontSize: '0.72rem', marginBottom: 6 }}>
-                Oral Defense Prompt #{selectedIdx + 1}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <span className="tag tag-amber" style={{ fontSize: '0.72rem' }}>
+                  Viva Question #{selectedIdx + 1}
+                </span>
+                <span className={`tag ${qType === 'mcq' ? 'tag-blue' : qType === 'fill_in_the_blank' ? 'tag-purple' : 'tag-gray'}`} style={{ fontSize: '0.68rem' }}>
+                  {qType === 'mcq' ? 'MCQ' : qType === 'fill_in_the_blank' ? 'Fill In Blank' : 'Conceptual'}
+                </span>
+              </div>
               <h4 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#fff', marginTop: 4 }}>
                 {currentQ.prompt}
               </h4>
@@ -204,17 +247,74 @@ export default function VivaSimulator({
 
           {/* Answer Input Area */}
           <div style={{ marginBottom: 14 }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
-              Your Practice Verbal Explanation:
-            </label>
-            <textarea
-              rows={4}
-              value={studentAnswers[selectedIdx] || ''}
-              onChange={(e) => handleAnswerChange(e.target.value)}
-              placeholder="Explain in your own words: e.g. I utilized a hash map because key lookups operate in O(1) average time, reducing overall complexity from O(n²) to O(n)..."
-              className="form-input"
-              style={{ width: '100%', resize: 'vertical' }}
-            />
+            {qType === 'mcq' ? (
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
+                  Select the Correct Option:
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {(currentQ.options || []).map((opt, oIdx) => {
+                    const isSelected = studentAnswers[selectedIdx] === opt
+                    return (
+                      <label
+                        key={oIdx}
+                        onClick={() => handleAnswerChange(opt)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '10px 14px',
+                          borderRadius: 8,
+                          background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-elevated)',
+                          border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem',
+                          color: isSelected ? '#fff' : 'var(--text-main)',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        <input
+                          type="radio"
+                          name={`sim_mcq_${selectedIdx}`}
+                          checked={isSelected}
+                          onChange={() => handleAnswerChange(opt)}
+                          style={{ accentColor: 'var(--accent-blue)' }}
+                        />
+                        <span>{opt}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : qType === 'fill_in_the_blank' ? (
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                  Your Answer for the Missing Term:
+                </label>
+                <input
+                  type="text"
+                  value={studentAnswers[selectedIdx] || ''}
+                  onChange={(e) => handleAnswerChange(e.target.value)}
+                  placeholder="Type the exact word or complexity term to complete the blank..."
+                  className="form-input"
+                  style={{ width: '100%', fontSize: '0.88rem', padding: '10px 14px' }}
+                />
+              </div>
+            ) : (
+              <div>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                  Your Explanation / Response:
+                </label>
+                <textarea
+                  rows={4}
+                  value={studentAnswers[selectedIdx] || ''}
+                  onChange={(e) => handleAnswerChange(e.target.value)}
+                  placeholder="Explain in your own words: e.g. I utilized a hash map because key lookups operate in O(1) average time, reducing overall complexity from O(n²) to O(n)..."
+                  className="form-input"
+                  style={{ width: '100%', resize: 'vertical' }}
+                />
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -225,7 +325,7 @@ export default function VivaSimulator({
               disabled={!(studentAnswers[selectedIdx] || '').trim()}
               style={{ fontSize: '0.8rem' }}
             >
-              <Send size={14} /> Quick Concept Check
+              <Send size={14} /> Quick Check
             </button>
             {onUpdateVivaAnswers && (
               <button
@@ -234,7 +334,7 @@ export default function VivaSimulator({
                 onClick={handleSaveToFaculty}
                 disabled={isUpdating}
                 style={{ fontSize: '0.8rem' }}
-                title="Save and submit your oral viva explanations for instructor verification"
+                title="Save and submit your viva answers for instructor verification"
               >
                 <Save size={14} />
                 <span>{isUpdating ? 'Submitting to Faculty...' : 'Submit Viva to Faculty ✅'}</span>
@@ -255,28 +355,42 @@ export default function VivaSimulator({
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Award size={18} color={currentResult.percentage >= 70 ? 'var(--accent-emerald)' : 'var(--accent-amber)'} />
                   <strong style={{ fontSize: '0.9rem', color: '#fff' }}>
-                    Concept Articulation Readiness: {currentResult.percentage}%
+                    {qType === 'mcq' || qType === 'fill_in_the_blank' ? 'Answer Accuracy:' : 'Concept Articulation Readiness:'} {currentResult.percentage}%
                   </strong>
                 </div>
                 <span className={`tag ${currentResult.percentage >= 70 ? 'tag-emerald' : 'tag-amber'}`}>
-                  {currentResult.percentage >= 70 ? 'VIVA READY ✅' : 'NEEDS EXPANSION ⚡'}
+                  {currentResult.percentage >= 70 ? 'CORRECT / READY ✅' : 'NEEDS REVISION ⚡'}
                 </span>
               </div>
 
-              {/* General Qualitative Readiness Guidance (answers & expected concepts kept private) */}
+              {/* Qualitative Guidance */}
               <div style={{ marginTop: 8, fontSize: '0.82rem', color: '#cbd5e1', lineHeight: 1.5 }}>
-                {currentResult.percentage >= 70 ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-emerald)' }}>
-                    <CheckCircle2 size={15} />
-                    <span>Strong conceptual articulation. Your response adequately explains the underlying algorithmic approach.</span>
-                  </div>
+                {qType === 'mcq' || qType === 'fill_in_the_blank' ? (
+                  currentResult.percentage >= 70 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-emerald)' }}>
+                      <CheckCircle2 size={15} />
+                      <span>Correct answer verified. You are ready to submit to faculty.</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: 'var(--accent-amber)' }}>
+                      <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span>Answer does not match the expected key. Please review the problem logic and try again.</span>
+                    </div>
+                  )
                 ) : (
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: 'var(--accent-amber)' }}>
-                    <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span>
-                      Consider expanding your explanation. Be sure to explain why your algorithm is structured this way, specify its time and space complexity, and discuss how edge cases are handled.
-                    </span>
-                  </div>
+                  currentResult.percentage >= 70 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--accent-emerald)' }}>
+                      <CheckCircle2 size={15} />
+                      <span>Strong conceptual articulation. Your response adequately explains the underlying algorithmic approach.</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, color: 'var(--accent-amber)' }}>
+                      <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 2 }} />
+                      <span>
+                        Consider expanding your explanation. Be sure to explain why your algorithm is structured this way, specify its time and space complexity, and discuss how edge cases are handled.
+                      </span>
+                    </div>
+                  )
                 )}
               </div>
             </div>

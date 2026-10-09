@@ -578,7 +578,7 @@ function App() {
 
         {/* Main Dual-Pane Studio Workspace */}
         <div style={{ display: 'grid', gridTemplateColumns: '1.05fr 1.25fr', gap: 24, width: '100%', alignItems: 'start' }}>
-          {/* LEFT COLUMN: Problem Spec, Oral Viva Defense, or Multi-Agent Evaluation Report */}
+          {/* LEFT COLUMN: Problem Spec, Viva Defense, or Multi-Agent Evaluation Report */}
           <div style={{ minWidth: 0 }}>
             <ProblemStatement
               questionsList={questionsList}

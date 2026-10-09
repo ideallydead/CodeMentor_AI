@@ -5,10 +5,102 @@ import shutil
 import tempfile
 import subprocess
 import logging
-from typing import Dict, Any, Optional
+import glob
+from typing import Dict, Any, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 MAX_OUTPUT_BYTES = 64000
+
+
+def _find_c_compiler() -> Optional[str]:
+    compiler = shutil.which('gcc') or shutil.which('clang')
+    if compiler:
+        return compiler
+    cc_env = os.environ.get('CC')
+    if cc_env and os.path.isfile(cc_env):
+        return cc_env
+    if os.name == 'nt':
+        candidates = [
+            r"C:\msys64\ucrt64\bin\gcc.exe",
+            r"C:\msys64\mingw64\bin\gcc.exe",
+            r"C:\msys64\usr\bin\gcc.exe",
+            r"C:\MinGW\bin\gcc.exe",
+            r"C:\TDM-GCC-64\bin\gcc.exe",
+            r"C:\Program Files\LLVM\bin\clang.exe",
+        ]
+        for c in candidates:
+            if os.path.isfile(c):
+                return c
+        for matched in glob.glob(r"C:\msys64\*\bin\gcc.exe"):
+            if os.path.isfile(matched):
+                return matched
+    elif os.name == 'posix':
+        for cand in ['/usr/bin/gcc', '/usr/local/bin/gcc', '/usr/bin/clang']:
+            if os.path.isfile(cand):
+                return cand
+    return None
+
+
+def _find_java_executables() -> Tuple[Optional[str], Optional[str]]:
+    javac = shutil.which('javac')
+    java = shutil.which('java')
+    if javac and java:
+        return javac, java
+
+    java_home = os.environ.get('JAVA_HOME')
+    if java_home:
+        cand_javac = os.path.join(java_home, 'bin', 'javac.exe' if os.name == 'nt' else 'javac')
+        cand_java = os.path.join(java_home, 'bin', 'java.exe' if os.name == 'nt' else 'java')
+        if not javac and os.path.isfile(cand_javac):
+            javac = cand_javac
+        if not java and os.path.isfile(cand_java):
+            java = cand_java
+
+    if javac and java:
+        return javac, java
+
+    if os.name == 'nt':
+        if not javac:
+            for pat in [
+                r"C:\Program Files\Java\jdk*\bin\javac.exe",
+                r"C:\Program Files\Eclipse Adoptium\jdk*\bin\javac.exe",
+                r"C:\Program Files\Microsoft\jdk*\bin\javac.exe",
+                r"C:\Program Files\Zulu\zulu*\bin\javac.exe",
+                r"C:\Program Files (x86)\Java\jdk*\bin\javac.exe",
+            ]:
+                matches = sorted(glob.glob(pat), reverse=True)
+                if matches:
+                    javac = matches[0]
+                    break
+
+        if not java:
+            for pat in [
+                r"C:\Program Files\Java\jdk*\bin\java.exe",
+                r"C:\Program Files\Java\jre*\bin\java.exe",
+                r"C:\Program Files\Eclipse Adoptium\jdk*\bin\java.exe",
+                r"C:\Program Files\Microsoft\jdk*\bin\java.exe",
+                r"C:\Program Files\Zulu\zulu*\bin\java.exe",
+                r"C:\Program Files (x86)\Java\jre*\bin\java.exe",
+            ]:
+                matches = sorted(glob.glob(pat), reverse=True)
+                if matches:
+                    java = matches[0]
+                    break
+    elif os.name == 'posix':
+        if not javac:
+            matches = sorted(glob.glob("/usr/lib/jvm/*/bin/javac"), reverse=True)
+            if matches:
+                javac = matches[0]
+            elif os.path.isfile('/usr/bin/javac'):
+                javac = '/usr/bin/javac'
+        if not java:
+            matches = sorted(glob.glob("/usr/lib/jvm/*/bin/java"), reverse=True)
+            if matches:
+                java = matches[0]
+            elif os.path.isfile('/usr/bin/java'):
+                java = '/usr/bin/java'
+
+    return javac, java
 
 
 def _truncate_output(text: str, max_bytes: int = MAX_OUTPUT_BYTES) -> str:
@@ -291,7 +383,7 @@ def _execute_in_host_process(
                 with open(c_file, 'w', encoding='utf-8') as f:
                     f.write(source)
 
-                gcc_path = shutil.which('gcc') or shutil.which('clang')
+                gcc_path = _find_c_compiler()
                 if not gcc_path:
                     return {
                         'status': 'error',
@@ -350,8 +442,7 @@ def _execute_in_host_process(
                 with open(java_file, 'w', encoding='utf-8') as f:
                     f.write(source)
 
-                javac_path = shutil.which('javac')
-                java_path = shutil.which('java')
+                javac_path, java_path = _find_java_executables()
                 if not javac_path or not java_path:
                     return {
                         'status': 'error',

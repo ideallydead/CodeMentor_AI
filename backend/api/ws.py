@@ -49,33 +49,39 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+import time
+
+
 def broadcast_event(event_type: str, data: Optional[Dict[str, Any]] = None):
     """
     Broadcasts a JSON event to all connected WebSocket clients across frontends.
     Thread-safe and async-safe: works seamlessly from both async and sync FastAPI routes.
     """
-    payload = {
-        "type": event_type,
-        "data": data or {},
-        "timestamp": asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
-    }
-    
-    # Try current running loop first
     try:
-        loop = asyncio.get_running_loop()
-        if loop.is_running():
-            loop.create_task(manager.broadcast(payload))
-            return
-    except RuntimeError:
-        pass
-
-    # If called from a sync thread pool, dispatch to stored main loop
-    if manager._loop and manager._loop.is_running():
+        payload = {
+            "type": event_type,
+            "data": data or {},
+            "timestamp": time.time()
+        }
+        
+        # 1. Try current running loop first if we're in an async context
         try:
-            asyncio.run_coroutine_threadsafe(manager.broadcast(payload), manager._loop)
-            return
-        except Exception as exc:
-            logger.warning(f"Could not dispatch broadcast via main loop: {exc}")
+            loop = asyncio.get_running_loop()
+            if loop.is_running():
+                loop.create_task(manager.broadcast(payload))
+                return
+        except RuntimeError:
+            pass
+
+        # 2. If called from a sync thread pool (e.g. AnyIO worker thread), dispatch to stored main loop
+        if manager._loop and manager._loop.is_running():
+            try:
+                asyncio.run_coroutine_threadsafe(manager.broadcast(payload), manager._loop)
+                return
+            except Exception as exc:
+                logger.warning(f"Could not dispatch broadcast via main loop: {exc}")
+    except Exception as exc:
+        logger.error(f"Error in broadcast_event for '{event_type}': {exc}", exc_info=True)
 
 
 @ws_router.websocket("/ws")

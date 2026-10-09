@@ -53,6 +53,10 @@ class VivaQuestion(Base):
     id = Column(Integer, primary_key=True, index=True)
     assignment_id = Column(Integer, ForeignKey('assignments.id'), nullable=False)
     prompt = Column(Text)
+    question_type = Column(String(50), default='conceptual')
+    options = Column(JSON, default=[])
+    correct_answer = Column(Text, nullable=True)
+    sample_answer = Column(Text, nullable=True)
     expected_concepts = Column(JSON, default=[])
     created_at = Column(DateTime, default=datetime.utcnow)
 

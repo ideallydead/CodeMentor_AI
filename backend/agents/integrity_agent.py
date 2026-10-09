@@ -103,7 +103,7 @@ def integrity_agent(
         summary_msg = f"High structural similarity ({max_similarity:.1f}%) detected with prior submission(s). AST inspection indicates structural duplication."
         recommendations = [
             "Faculty review recommended for potential academic dishonesty",
-            "Conduct personalized viva oral examination to verify code authorship"
+            "Conduct personalized viva defense examination to verify code authorship"
         ]
     elif max_similarity >= 45.0:
         risk_level = 'moderate'

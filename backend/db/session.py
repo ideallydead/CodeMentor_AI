@@ -27,6 +27,18 @@ def _apply_db_migrations(engine):
             if 'viva_feedback' not in columns:
                 conn.execute(text("ALTER TABLE submissions ADD COLUMN viva_feedback TEXT"))
 
+    if 'viva_questions' in inspector.get_table_names():
+        vq_columns = [c['name'] for c in inspector.get_columns('viva_questions')]
+        with engine.begin() as conn:
+            if 'question_type' not in vq_columns:
+                conn.execute(text("ALTER TABLE viva_questions ADD COLUMN question_type VARCHAR(50) DEFAULT 'conceptual'"))
+            if 'options' not in vq_columns:
+                conn.execute(text("ALTER TABLE viva_questions ADD COLUMN options JSON"))
+            if 'correct_answer' not in vq_columns:
+                conn.execute(text("ALTER TABLE viva_questions ADD COLUMN correct_answer TEXT"))
+            if 'sample_answer' not in vq_columns:
+                conn.execute(text("ALTER TABLE viva_questions ADD COLUMN sample_answer TEXT"))
+
 
 
 def _seed_initial_data(engine):

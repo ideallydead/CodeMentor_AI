@@ -132,6 +132,10 @@ def approve_question(question_id: int, db: Session = Depends(get_db)):
             vq_model = models.VivaQuestion(
                 assignment_id=question.id,
                 prompt=dv.get('prompt', ''),
+                question_type=dv.get('question_type', 'conceptual'),
+                options=dv.get('options', []),
+                correct_answer=dv.get('correct_answer'),
+                sample_answer=dv.get('sample_answer'),
                 expected_concepts=dv.get('expected_concepts', [])
             )
             db.add(vq_model)

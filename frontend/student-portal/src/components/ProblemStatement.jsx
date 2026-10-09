@@ -5,7 +5,8 @@ import {
   Clock,
   Code2,
   FileText,
-  Mic,
+  HelpCircle,
+  CheckSquare,
   Award,
   Terminal,
   Brain,
@@ -159,8 +160,8 @@ export default function ProblemStatement({
             style={{ flex: 1, justifyContent: 'center' }}
             onClick={() => onChangeTab && onChangeTab('viva')}
           >
-            <Mic size={15} />
-            <span>Oral Viva Defense</span>
+            <HelpCircle size={15} />
+            <span>Viva Defense</span>
             <span
               className={`tag ${answeredVivaCount === vivaList.length ? 'tag-emerald' : 'tag-amber'}`}
               style={{ fontSize: '0.68rem', padding: '1px 6px', marginLeft: 4 }}
@@ -285,57 +286,118 @@ export default function ProblemStatement({
         </div>
       )}
 
-      {/* TAB CONTENT 2: ORAL VIVA DEFENSE PREPARATION */}
+      {/* TAB CONTENT 2: VIVA DEFENSE PREPARATION */}
       {activeTab === 'viva' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1, paddingRight: 4 }}>
           <div style={{ background: 'var(--bg-elevated)', padding: 14, borderRadius: 8, border: '1px solid var(--border-color)' }}>
             <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--accent-amber)', marginBottom: 4 }}>
-              Oral Viva Defense Instructions
+              Viva Assessment Instructions
             </h4>
             <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
-              Formulate verbal/conceptual explanations in your own words. These answers are submitted with your code and evaluated for concept accuracy by CodeMentor AI, then reviewed and verified by your course instructor.
+              Answer the defense questions below (MCQs, Fill-in-the-blanks, and Conceptual questions). Your answers are submitted with your code, evaluated for concept accuracy by CodeMentor AI, and reviewed by your course instructor.
             </p>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {vivaList.map((vq, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 10,
-                  padding: 14
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span className="tag tag-amber" style={{ fontSize: '0.7rem' }}>
-                    Defense Question {idx + 1}
-                  </span>
-                  {vq.expected_concepts && vq.expected_concepts.length > 0 && (
-                    <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                      Focus: {vq.expected_concepts.join(', ')}
-                    </span>
+            {vivaList.map((vq, idx) => {
+              const qType = vq.question_type || (vq.options && vq.options.length > 0 ? 'mcq' : 'conceptual')
+              const currentAnswer = vivaAnswers[idx] || ''
+
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    background: 'var(--bg-elevated)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 10,
+                    padding: 14
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="tag tag-amber" style={{ fontSize: '0.7rem' }}>
+                        Question {idx + 1}
+                      </span>
+                      <span className={`tag ${qType === 'mcq' ? 'tag-blue' : qType === 'fill_in_the_blank' ? 'tag-purple' : 'tag-gray'}`} style={{ fontSize: '0.68rem' }}>
+                        {qType === 'mcq' ? 'MCQ' : qType === 'fill_in_the_blank' ? 'Fill In Blank' : 'Conceptual'}
+                      </span>
+                    </div>
+                    {vq.expected_concepts && vq.expected_concepts.length > 0 && (
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                        Focus: {vq.expected_concepts.join(', ')}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: 12 }}>
+                    {vq.prompt}
+                  </div>
+
+                  {/* Render based on Question Type */}
+                  {qType === 'mcq' ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                      {(vq.options || []).map((opt, oIdx) => {
+                        const isSelected = currentAnswer === opt
+                        return (
+                          <label
+                            key={oIdx}
+                            onClick={() => setVivaAnswers && setVivaAnswers(prev => ({ ...prev, [idx]: opt }))}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              padding: '8px 12px',
+                              borderRadius: 6,
+                              background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-input)',
+                              border: isSelected ? '1px solid var(--accent-blue)' : '1px solid var(--border-color)',
+                              cursor: 'pointer',
+                              fontSize: '0.84rem',
+                              color: isSelected ? '#fff' : 'var(--text-main)',
+                              transition: 'all 0.15s ease'
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name={`viva_q_${idx}`}
+                              checked={isSelected}
+                              onChange={() => setVivaAnswers && setVivaAnswers(prev => ({ ...prev, [idx]: opt }))}
+                              style={{ accentColor: 'var(--accent-blue)' }}
+                            />
+                            <span>{opt}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  ) : qType === 'fill_in_the_blank' ? (
+                    <div style={{ marginTop: 6 }}>
+                      <input
+                        type="text"
+                        value={currentAnswer}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setVivaAnswers && setVivaAnswers(prev => ({ ...prev, [idx]: val }))
+                        }}
+                        placeholder="Type the missing word, phrase, or complexity term..."
+                        className="form-input"
+                        style={{ width: '100%', fontSize: '0.84rem' }}
+                      />
+                    </div>
+                  ) : (
+                    <textarea
+                      rows={3}
+                      value={currentAnswer}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setVivaAnswers && setVivaAnswers(prev => ({ ...prev, [idx]: val }))
+                      }}
+                      placeholder="Explain your approach, algorithmic logic, time/space complexity, and edge-case handling in your own words..."
+                      className="form-input"
+                      style={{ width: '100%', resize: 'vertical', fontSize: '0.84rem' }}
+                    />
                   )}
                 </div>
-
-                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: 10 }}>
-                  {vq.prompt}
-                </div>
-
-                <textarea
-                  rows={3}
-                  value={vivaAnswers[idx] || ''}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    setVivaAnswers && setVivaAnswers(prev => ({ ...prev, [idx]: val }))
-                  }}
-                  placeholder="Explain your approach, algorithmic logic, time/space complexity, and edge-case handling in your own words..."
-                  className="form-input"
-                  style={{ width: '100%', resize: 'vertical', fontSize: '0.84rem' }}
-                />
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

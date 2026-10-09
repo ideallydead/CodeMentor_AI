@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { CheckCircle2, Trash2, Plus, Edit2, Save, Eye, EyeOff, BookOpen, Mic } from 'lucide-react'
+import { CheckCircle2, Trash2, Plus, Edit2, Save, Eye, EyeOff, BookOpen, CheckSquare, HelpCircle, FileQuestion, Check } from 'lucide-react'
 
 export default function DraftReviewer({
   currentQuestion,
@@ -36,7 +36,7 @@ export default function DraftReviewer({
           Generated Test Suite & Viva Review
         </h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.86rem', lineHeight: 1.6 }}>
-          Submit a problem specification on the left to inspect AI-generated sample and hidden test cases, along with the oral viva defense bank.
+          Submit a problem specification on the left to inspect AI-generated sample and hidden test cases, along with the interactive viva question set (MCQs, Fill-in-the-blanks, and Conceptual).
         </p>
       </section>
     )
@@ -80,7 +80,14 @@ export default function DraftReviewer({
   const handleAddVivaQuestion = () => {
     setVivaList(prev => [
       ...prev,
-      { prompt: '', expected_concepts: [], sample_answer: '' }
+      {
+        prompt: '',
+        question_type: 'mcq',
+        options: ['A) ', 'B) ', 'C) ', 'D) '],
+        correct_answer: 'A) ',
+        expected_concepts: [],
+        sample_answer: ''
+      }
     ])
     setEditingViva(true)
   }
@@ -93,11 +100,17 @@ export default function DraftReviewer({
     if (onUpdateDraftViva) {
       const cleaned = vivaList.map(v => ({
         ...v,
+        question_type: v.question_type || 'conceptual',
+        options: v.question_type === 'mcq'
+          ? (Array.isArray(v.options) ? v.options.map(o => (o || '').trim()).filter(Boolean) : [])
+          : [],
+        correct_answer: (v.correct_answer || '').trim(),
         expected_concepts: Array.isArray(v.expected_concepts)
           ? v.expected_concepts.filter(Boolean)
           : typeof v.expected_concepts === 'string'
           ? v.expected_concepts.split(',').map(s => s.trim()).filter(Boolean)
-          : []
+          : [],
+        sample_answer: (v.sample_answer || '').trim()
       }))
       await onUpdateDraftViva(cleaned)
     }
@@ -263,9 +276,9 @@ export default function DraftReviewer({
 
       {/* SECTION 2: DRAFT VIVA QUESTION BANK */}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
           <h4 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--accent-purple)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Mic size={16} /> Draft Viva Question Bank ({vivaList.length} questions)
+            <HelpCircle size={16} /> Draft Viva Question Bank ({vivaList.length} questions)
           </h4>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -300,111 +313,290 @@ export default function DraftReviewer({
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {vivaList.map((v, idx) => (
-            <div
-              key={idx}
-              style={{
-                background: 'var(--bg-input)',
-                padding: 14,
-                borderRadius: 8,
-                fontSize: '0.82rem',
-                border: '1px solid var(--border-color)'
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <strong style={{ color: 'var(--accent-purple)', fontSize: '0.84rem' }}>
-                  Question #{idx + 1}
-                </strong>
-                {editingViva && (
-                  <button
-                    type="button"
-                    className="btn-outline"
-                    onClick={() => handleRemoveVivaQuestion(idx)}
-                    style={{ fontSize: '0.72rem', padding: '2px 6px', color: 'var(--accent-rose)' }}
-                    title="Delete this viva question"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {vivaList.map((v, idx) => {
+            const qType = v.question_type || 'conceptual'
+            return (
+              <div
+                key={idx}
+                style={{
+                  background: 'var(--bg-input)',
+                  padding: 14,
+                  borderRadius: 10,
+                  fontSize: '0.82rem',
+                  border: '1px solid var(--border-color)'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <strong style={{ color: 'var(--accent-purple)', fontSize: '0.84rem' }}>
+                      Question #{idx + 1}
+                    </strong>
+                    <span
+                      className={`tag ${qType === 'mcq' ? 'tag-blue' : qType === 'fill_in_the_blank' ? 'tag-emerald' : 'tag-purple'}`}
+                      style={{ fontSize: '0.68rem', padding: '1px 6px', textTransform: 'uppercase' }}
+                    >
+                      {qType === 'mcq' ? 'MCQ' : qType === 'fill_in_the_blank' ? 'Fill in the Blank' : 'Conceptual'}
+                    </span>
+                  </div>
+
+                  {editingViva && (
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={() => handleRemoveVivaQuestion(idx)}
+                      style={{ fontSize: '0.72rem', padding: '2px 6px', color: 'var(--accent-rose)' }}
+                      title="Delete this viva question"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
+                </div>
+
+                {editingViva ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* Question Type Selector */}
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                        Question Format / Type:
+                      </span>
+                      <select
+                        className="form-input"
+                        value={qType}
+                        onChange={(e) => {
+                          const newType = e.target.value
+                          handleVivaChange(idx, 'question_type', newType)
+                          if (newType === 'mcq' && (!v.options || v.options.length === 0)) {
+                            handleVivaChange(idx, 'options', ['A) ', 'B) ', 'C) ', 'D) '])
+                            handleVivaChange(idx, 'correct_answer', 'A) ')
+                          }
+                        }}
+                        style={{ fontSize: '0.82rem', padding: '5px 8px' }}
+                      >
+                        <option value="mcq">Multiple Choice Question (MCQ)</option>
+                        <option value="fill_in_the_blank">Fill in the Blanks</option>
+                        <option value="conceptual">Conceptual / Short Answer</option>
+                      </select>
+                    </div>
+
+                    {/* Question Prompt */}
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                        {qType === 'mcq' ? 'MCQ Question Prompt:' : qType === 'fill_in_the_blank' ? 'Fill in the Blank Statement (Use "___" for blank):' : 'Viva Question Prompt:'}
+                      </span>
+                      <textarea
+                        className="form-input"
+                        rows={2}
+                        value={v.prompt || ''}
+                        onChange={(e) => handleVivaChange(idx, 'prompt', e.target.value)}
+                        placeholder={
+                          qType === 'mcq'
+                            ? "e.g. What is the average time complexity of searching in a hash map?"
+                            : qType === 'fill_in_the_blank'
+                            ? "e.g. In binary search, the input collection must always be ___ before execution."
+                            : "e.g. Explain why a hash map is more efficient than nested loops."
+                        }
+                        style={{ fontSize: '0.82rem', lineHeight: 1.4 }}
+                      />
+                    </div>
+
+                    {/* MCQ Options Configuration */}
+                    {qType === 'mcq' && (
+                      <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+                          Choices (Select radio next to correct choice):
+                        </span>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                          {(v.options && v.options.length >= 2 ? v.options : ['A) ', 'B) ', 'C) ', 'D) ']).map((opt, optIdx) => {
+                            const isCorrect = (v.correct_answer || '').trim() === (opt || '').trim() ||
+                              (Boolean(v.correct_answer) && Boolean(opt) && (v.correct_answer || '').trim().startsWith(opt.slice(0, 2).trim()))
+                            return (
+                              <div
+                                key={optIdx}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  background: isCorrect ? 'rgba(52, 211, 153, 0.12)' : 'var(--bg-surface)',
+                                  border: `1px solid ${isCorrect ? 'var(--accent-emerald)' : 'var(--border-color)'}`,
+                                  borderRadius: 6,
+                                  padding: '4px 8px'
+                                }}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`correct_choice_${idx}`}
+                                  checked={isCorrect}
+                                  onChange={() => handleVivaChange(idx, 'correct_answer', opt)}
+                                  title="Mark this option as correct"
+                                  style={{ accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
+                                />
+                                <input
+                                  className="form-input"
+                                  value={opt}
+                                  onChange={(e) => {
+                                    const nextOpts = [...(v.options || ['A) ', 'B) ', 'C) ', 'D) '])]
+                                    nextOpts[optIdx] = e.target.value
+                                    handleVivaChange(idx, 'options', nextOpts)
+                                    if (isCorrect) {
+                                      handleVivaChange(idx, 'correct_answer', e.target.value)
+                                    }
+                                  }}
+                                  placeholder={`Option ${String.fromCharCode(65 + optIdx)}`}
+                                  style={{ fontSize: '0.8rem', padding: '3px 6px', border: 'none', background: 'transparent' }}
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Fill in the Blank Target Answer */}
+                    {qType === 'fill_in_the_blank' && (
+                      <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                          Expected Blank Word / Answer:
+                        </span>
+                        <input
+                          className="form-input"
+                          value={v.correct_answer || ''}
+                          onChange={(e) => handleVivaChange(idx, 'correct_answer', e.target.value)}
+                          placeholder="e.g. sorted (or comma-separated acceptable synonyms: sorted, ordered)"
+                          style={{ fontSize: '0.82rem' }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Target Concepts */}
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                        Target Concepts (comma-separated):
+                      </span>
+                      <input
+                        className="form-input"
+                        value={Array.isArray(v.expected_concepts) ? v.expected_concepts.join(', ') : (v.expected_concepts || '')}
+                        onChange={(e) => handleVivaChange(idx, 'expected_concepts', e.target.value.split(',').map(s => s.trimStart()))}
+                        placeholder="e.g. Time complexity, Hash map lookup, Space trade-off"
+                        style={{ fontSize: '0.82rem' }}
+                      />
+                    </div>
+
+                    {/* Benchmark / Reference Answer */}
+                    <div>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
+                        Reference Explanation / Justification:
+                      </span>
+                      <textarea
+                        className="form-input"
+                        rows={2}
+                        value={v.sample_answer || ''}
+                        onChange={(e) => handleVivaChange(idx, 'sample_answer', e.target.value)}
+                        placeholder="Expected justification or reasoning..."
+                        style={{ fontSize: '0.8rem', lineHeight: 1.4 }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    {/* Prompt Rendering */}
+                    <div style={{ fontSize: '0.88rem', color: 'var(--text-main)', fontWeight: 600, marginBottom: 8 }}>
+                      {qType === 'fill_in_the_blank' && (v.prompt || '').includes('___') ? (
+                        <span>
+                          {(v.prompt || '').split('___').map((part, pIdx, arr) => (
+                            <React.Fragment key={pIdx}>
+                              {part}
+                              {pIdx < arr.length - 1 && (
+                                <span style={{
+                                  background: 'rgba(52, 211, 153, 0.15)',
+                                  color: 'var(--accent-emerald)',
+                                  border: '1px dashed var(--accent-emerald)',
+                                  padding: '1px 8px',
+                                  borderRadius: 4,
+                                  fontWeight: 700
+                                }}>
+                                  ___
+                                </span>
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </span>
+                      ) : (
+                        v.prompt || '(Empty question prompt)'
+                      )}
+                    </div>
+
+                    {/* MCQ Options Display */}
+                    {qType === 'mcq' && v.options && v.options.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 6, marginBottom: 8 }}>
+                        {v.options.map((opt, optIdx) => {
+                          const isCorrect = (v.correct_answer || '').trim() === (opt || '').trim() ||
+                            (Boolean(v.correct_answer) && Boolean(opt) && (v.correct_answer || '').trim().startsWith(opt.slice(0, 2).trim()))
+                          return (
+                            <div
+                              key={optIdx}
+                              style={{
+                                padding: '6px 10px',
+                                borderRadius: 6,
+                                background: isCorrect ? 'rgba(52, 211, 153, 0.12)' : 'var(--bg-surface)',
+                                border: `1px solid ${isCorrect ? 'var(--accent-emerald)' : 'var(--border-color)'}`,
+                                color: isCorrect ? 'var(--accent-emerald)' : 'var(--text-main)',
+                                fontSize: '0.78rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6
+                              }}
+                            >
+                              {isCorrect ? <Check size={14} color="var(--accent-emerald)" /> : <span style={{ width: 14, height: 14, display: 'inline-block', borderRadius: '50%', border: '1px solid var(--text-muted)' }} />}
+                              <span style={{ fontWeight: isCorrect ? 700 : 400 }}>{opt}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Fill in the Blank Display */}
+                    {qType === 'fill_in_the_blank' && v.correct_answer && (
+                      <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Expected Answer:</span>
+                        <span className="tag tag-emerald" style={{ fontSize: '0.74rem', padding: '2px 8px' }}>
+                          ✓ {v.correct_answer}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Concepts */}
+                    {v.expected_concepts && (Array.isArray(v.expected_concepts) ? v.expected_concepts.length > 0 : Boolean(v.expected_concepts)) && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: v.sample_answer ? 8 : 0 }}>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Concepts:</span>
+                        {(Array.isArray(v.expected_concepts) ? v.expected_concepts : String(v.expected_concepts).split(',')).filter(Boolean).map((c, cIdx) => (
+                          <span key={cIdx} className="tag tag-purple" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
+                            {c.trim ? c.trim() : c}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Sample Answer / Explanation */}
+                    {v.sample_answer && (
+                      <div style={{
+                        marginTop: 6,
+                        padding: '8px 10px',
+                        background: 'var(--bg-card)',
+                        borderRadius: 6,
+                        fontSize: '0.78rem',
+                        color: 'var(--text-muted)',
+                        borderLeft: '2px solid var(--accent-purple)'
+                      }}>
+                        <strong style={{ color: 'var(--text-dim)' }}>Reference / Explanation: </strong>
+                        {v.sample_answer}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
-
-              {editingViva ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
-                      Oral Viva Question Prompt:
-                    </span>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      value={v.prompt || ''}
-                      onChange={(e) => handleVivaChange(idx, 'prompt', e.target.value)}
-                      placeholder="e.g. Why is a hash map more efficient than nested loops? Explain the time complexity."
-                      style={{ fontSize: '0.82rem', lineHeight: 1.4 }}
-                    />
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
-                      Target Concepts (comma-separated):
-                    </span>
-                    <input
-                      className="form-input"
-                      value={Array.isArray(v.expected_concepts) ? v.expected_concepts.join(', ') : (v.expected_concepts || '')}
-                      onChange={(e) => handleVivaChange(idx, 'expected_concepts', e.target.value.split(',').map(s => s.trimStart()))}
-                      placeholder="e.g. Time complexity, Hash map lookup, Space trade-off"
-                      style={{ fontSize: '0.82rem' }}
-                    />
-                  </div>
-
-                  <div>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: 3 }}>
-                      Benchmark / Sample Answer (optional):
-                    </span>
-                    <textarea
-                      className="form-input"
-                      rows={2}
-                      value={v.sample_answer || ''}
-                      onChange={(e) => handleVivaChange(idx, 'sample_answer', e.target.value)}
-                      placeholder="Expected conceptual answer points..."
-                      style={{ fontSize: '0.8rem', lineHeight: 1.4 }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div style={{ fontSize: '0.88rem', color: 'var(--text-main)', fontWeight: 600, marginBottom: 6 }}>
-                    {v.prompt || '(Empty question prompt)'}
-                  </div>
-                  {v.expected_concepts && (Array.isArray(v.expected_concepts) ? v.expected_concepts.length > 0 : Boolean(v.expected_concepts)) && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: v.sample_answer ? 8 : 0 }}>
-                      <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Concepts:</span>
-                      {(Array.isArray(v.expected_concepts) ? v.expected_concepts : String(v.expected_concepts).split(',')).filter(Boolean).map((c, cIdx) => (
-                        <span key={cIdx} className="tag tag-purple" style={{ fontSize: '0.7rem', padding: '1px 6px' }}>
-                          {c.trim ? c.trim() : c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {v.sample_answer && (
-                    <div style={{
-                      marginTop: 6,
-                      padding: '8px 10px',
-                      background: 'var(--bg-card)',
-                      borderRadius: 6,
-                      fontSize: '0.78rem',
-                      color: 'var(--text-muted)',
-                      borderLeft: '2px solid var(--accent-purple)'
-                    }}>
-                      <strong style={{ color: 'var(--text-dim)' }}>Sample Answer: </strong>
-                      {v.sample_answer}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 

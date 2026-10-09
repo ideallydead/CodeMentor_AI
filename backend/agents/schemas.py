@@ -174,12 +174,16 @@ class SelectedVivaQuestion(BaseModel):
     prompt: str = Field(..., description="The viva question prompt")
     expected_concepts: List[str] = Field(default_factory=list, description="Target concepts expected in student's answer")
     personalization_reason: str = Field(..., description="Explanation of why this question was selected based on student's code")
+    question_type: Optional[str] = Field("conceptual", description="Question format: 'mcq', 'fill_in_the_blank', or 'conceptual'")
+    options: Optional[List[str]] = Field(default_factory=list, description="List of 4 choices if MCQ")
+    correct_answer: Optional[str] = Field(None, description="Correct option or blank value")
+    sample_answer: Optional[str] = Field(None, description="Benchmark or sample answer")
 
 
 class VivaReport(BaseModel):
     """Complete output of the submission-time Viva Agent."""
     selected_questions: List[SelectedVivaQuestion] = Field(default_factory=list, description="Selected personalized viva questions")
-    guidance_for_faculty: str = Field(..., description="Instructions for faculty during oral evaluation")
+    guidance_for_faculty: str = Field(..., description="Instructions for faculty during viva evaluation")
 
 
 # =============================================================================

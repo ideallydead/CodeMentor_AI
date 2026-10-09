@@ -155,7 +155,7 @@ export default function SubmissionsTable({
             className="form-input"
             style={{ width: 'auto', fontSize: '0.82rem', padding: '7px 12px' }}
           >
-            <option value="all">All Viva Defense Statuses</option>
+            <option value="all">All Viva Statuses</option>
             <option value="verified">Verified Viva</option>
             <option value="pending">Pending Verification</option>
             <option value="none">No Viva Submitted</option>
@@ -201,7 +201,7 @@ export default function SubmissionsTable({
               <th style={{ padding: '12px 14px' }}>Correctness</th>
               <th style={{ padding: '12px 14px' }}>Integrity Risk</th>
               <th style={{ padding: '12px 14px' }}>AI Recommendation</th>
-              <th style={{ padding: '12px 14px' }}>Oral Viva</th>
+              <th style={{ padding: '12px 14px' }}>Viva Status</th>
               <th style={{ padding: '12px 14px' }}>Final Grade</th>
               <th style={{ padding: '12px 14px', textAlign: 'center' }}>Actions</th>
             </tr>
